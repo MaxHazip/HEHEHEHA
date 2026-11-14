@@ -5,18 +5,20 @@ import { useAuthStore } from '@/store/authStore'
 
 export default function AppLayout() {
   const role = useAuthStore((s) => s.role)
-  
-  // Скрываем сайдбар для инженера и админа, так как у них одна страница
   const showSidebar = role !== 'engineer' && role !== 'admin'
 
   return (
-    <div className="h-screen flex overflow-hidden">
-      {showSidebar && <Sidebar />}
-      <div className="flex-1 flex flex-col min-w-0">
-        <Topbar />
-        <main className="flex-1 overflow-auto p-6 bg-slate-50">
-          <Outlet />
-        </main>
+    <div className="app-background">
+      <div className="app-shell">
+        {showSidebar && <Sidebar />}
+
+        <div className="app-main">
+          <Topbar />
+
+          <main className="app-content">
+            <Outlet />
+          </main>
+        </div>
       </div>
     </div>
   )
