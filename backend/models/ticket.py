@@ -81,6 +81,8 @@ class Ticket(Base):
 
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
 
+    reviewed_description: Mapped[str | None] = mapped_column(Text)
+
     channel: Mapped[str] = mapped_column(String(20), nullable=False)
 
     status: Mapped[str] = mapped_column(

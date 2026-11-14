@@ -296,6 +296,8 @@ def _apply_result(ticket: Ticket, result: TicketAIResult) -> None:
         result.issue.impact.scope in _MASS_SCOPES
     )
     ticket.needs_human_review = result.needs_human_review
+    if ticket.status == "draft":
+        ticket.status = "new"
 
 
 async def analyze_ticket(

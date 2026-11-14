@@ -82,6 +82,7 @@ class TicketCreate(BaseModel):
 
 
 class TicketUpdate(BaseModel):
+    reviewed_description: str | None = Field(default=None, min_length=1, max_length=20_000)
     status: TicketStatus | None = None
     priority: TicketPriority | None = None
     category_id: int | None = None

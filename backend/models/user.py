@@ -9,10 +9,9 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
-    Index,
+    UniqueConstraint,
     String,
     func,
-    text,
     true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -26,7 +25,7 @@ if TYPE_CHECKING:
     from backend.models.ticket import Ticket
     from backend.models.ticket_event import TicketEvent
 
-USER_ROLES = ("requester", "dispatcher", "engineer")
+USER_ROLES = ("requester", "dispatcher", "engineer", "admin")
 
 
 class User(Base):
@@ -36,7 +35,7 @@ class User(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "role IN ('requester', 'dispatcher', 'engineer')",
+            "role IN ('requester', 'dispatcher', 'engineer', 'admin')",
             name="ck_users_role",
         ),
         CheckConstraint(
@@ -44,20 +43,19 @@ class User(Base):
             name="ck_users_name_not_blank",
         ),
         CheckConstraint(
-            "length(trim(email)) > 0",
-            name="ck_users_email_not_blank",
+            "length(trim(phone)) > 0",
+            name="ck_users_phone_not_blank",
         ),
-        # Уникальность email без учёта регистра.
-        Index("uq_users_email_lower", text("lower(email)"), unique=True),
+        UniqueConstraint("phone", name="uq_users_phone"),
     )
 
     id: Mapped[int] = mapped_column(big_int(), primary_key=True, autoincrement=True)
 
     name: Mapped[str] = mapped_column(String(150), nullable=False)
 
-    # email: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone: Mapped[str] = mapped_column(String(32), nullable=False)
 
-    phone: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    legacy_email: Mapped[str | None] = mapped_column(String(255))
 
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
 

@@ -16,7 +16,7 @@ export default function EngineerPage() {
   const [actionState, setActionState] = useState<{ ticket: Ticket, action: 'complete' | 'refuse' } | null>(null)
 
   const myTickets = tickets.filter(
-    (t) => t.status === 'in_progress' && t.assignee?.name === user?.name
+    (t) => t.status === 'in_progress' && t.assignee !== null && t.assignee.id === user?.engineerId
   )
 
   const handleConfirm = () => {

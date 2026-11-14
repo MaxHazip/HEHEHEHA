@@ -1,5 +1,5 @@
-export type TicketStatus = 'new' | 'in_progress' | 'closed'
-export type TicketPriority = 'low' | 'medium' | 'high'
+export type TicketStatus = 'draft' | 'new' | 'in_progress' | 'resolved' | 'closed'
+export type TicketPriority = 'low' | 'medium' | 'high' | 'critical'
 
 export interface Engineer {
   id: number

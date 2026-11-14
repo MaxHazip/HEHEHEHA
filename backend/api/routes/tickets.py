@@ -29,12 +29,15 @@ from backend.api.serializers import (
 from backend.core.database import get_session
 from backend.core.settings import settings
 from backend.models import (
+    Category,
     Call,
     ChatMessage,
     ChatSession,
     Engineer,
+    Subcategory,
     Ticket,
     TicketAttachment,
+    TicketEvent,
 )
 from backend.schemas.ai_schemas import AnalyzeTicketRequest
 from backend.schemas.ticket_schemas import (
@@ -201,8 +204,37 @@ async def update_ticket(
         if engineer is None:
             raise HTTPException(status_code=404, detail="Инженер не найден")
 
+    for field in ("status", "needs_human_review", "is_mass_incident"):
+        if field in data and data[field] is None:
+            raise HTTPException(status_code=422, detail=f"{field} не может быть null")
+
+    if "category_id" in data or "subcategory_id" in data:
+        category_id = data.get("category_id", ticket.category_id)
+        if category_id is not None and await session.get(Category, category_id) is None:
+            raise HTTPException(status_code=404, detail="Категория не найдена")
+
+        # Смена категории сбрасывает прежнюю подкатегорию, если новую не передали.
+        if category_id != ticket.category_id:
+            data.setdefault("subcategory_id", None)
+
+        subcategory_id = data.get("subcategory_id", ticket.subcategory_id)
+        if subcategory_id is not None:
+            subcategory = await session.get(Subcategory, subcategory_id)
+            if subcategory is None:
+                raise HTTPException(status_code=404, detail="Подкатегория не найдена")
+            if subcategory.category_id != category_id:
+                raise HTTPException(
+                    status_code=422, detail="Подкатегория не принадлежит категории"
+                )
+
     for field, value in data.items():
-        setattr(ticket, field, value)
+        old_value = getattr(ticket, field)
+        if old_value != value:
+            session.add(TicketEvent(
+                ticket_id=ticket.id, action="updated", field=field,
+                old_value=old_value, new_value=value,
+            ))
+            setattr(ticket, field, value)
 
     await session.commit()
     await session.refresh(ticket)
@@ -223,7 +255,12 @@ async def assign_ticket(
     engineer = await session.get(Engineer, payload.engineer_id)
     if engineer is None:
         raise HTTPException(status_code=404, detail="Инженер не найден")
-    ticket.engineer_id = engineer.id
+    if ticket.engineer_id != engineer.id:
+        session.add(TicketEvent(
+            ticket_id=ticket.id, action="assigned", field="engineer_id",
+            old_value=ticket.engineer_id, new_value=engineer.id,
+        ))
+        ticket.engineer_id = engineer.id
     await session.commit()
     await session.refresh(ticket)
     return await build_ticket_detail(session, ticket)

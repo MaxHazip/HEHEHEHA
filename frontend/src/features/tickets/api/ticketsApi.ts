@@ -1,83 +1,60 @@
+import { api } from '@/lib/api'
 import type { Engineer, Ticket } from '@/types/ticket.types'
 
-const ENGINEERS: Engineer[] = [
-  { id: 1, name: 'Иван Сетевой', specialty: 'Сети и интернет' },
-  { id: 2, name: 'Петр Трубопроводов', specialty: 'Сантехника' },
-  { id: 3, name: 'Анна Электрикова', specialty: 'Электрика' },
-]
-
-const INITIAL_TICKETS: Ticket[] = [
-  {
-    id: 101,
-    title: 'Нет интернета в 305 кабинете',
-    aiDescription: 'Клиент сообщает об отсутствии подключения к сети. Оборудование не получает IP-адрес.',
-    aiSolution: 'Необходимо проверить коммутатор на 3 этаже. Сбросить порт 12. Проверить настройки DHCP на роутере.',
-    documents: ['Инструкция_по_настройке_DHCP.pdf', 'Схема_сети_3_этаж.png'],
-    category: 'Интернет / Сеть',
-    status: 'new',
-    priority: 'high',
-    assignee: ENGINEERS[0],
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 102,
-    title: 'Прорвало трубу в столовой',
-    aiDescription: 'Обнаружена течь воды под раковиной. Требуется срочный вызов сантехника.',
-    aiSolution: 'Перекрыть стояк в подвале. Заменить гибкую подводку и сифон под мойкой.',
-    documents: ['План_трубопровода.pdf'],
-    category: 'Сантехника',
-    status: 'new',
-    priority: 'high',
-    assignee: ENGINEERS[0],
-    createdAt: new Date().toISOString(),
-  }
-]
-
-const getDB = (): Ticket[] => {
-  const data = localStorage.getItem('mock_tickets_v2')
-  if (data) return JSON.parse(data)
-  localStorage.setItem('mock_tickets_v2', JSON.stringify(INITIAL_TICKETS))
-  return INITIAL_TICKETS
+interface UserRead {
+  id: number
+  name: string
+  specialty: string | null
+  engineer_id: number | null
 }
 
-const saveDB = (tickets: Ticket[]) => {
-  localStorage.setItem('mock_tickets_v2', JSON.stringify(tickets))
+interface TicketRead {
+  id: number
+  title: string
+  description: string
+  ai_description: string | null
+  ai_solution: string | null
+  category_code: string
+  status: Ticket['status']
+  priority: Ticket['priority']
+  assignee: UserRead | null
+  created_at: string
 }
 
-const delay = (ms: number) => new Promise(res => setTimeout(res, ms))
+function engineerProfile(user: UserRead): Engineer | null {
+  if (user.engineer_id === null) return null
+  return { id: user.engineer_id, name: user.name, specialty: user.specialty ?? '' }
+}
+
+async function update(id: number, changes: object): Promise<void> {
+  await api.patch(`/api/tickets/${id}`, changes)
+}
 
 export const ticketsApi = {
-  getTickets: async (): Promise<Ticket[]> => { await delay(300); return getDB() },
-  getEngineers: async (): Promise<Engineer[]> => ENGINEERS,
-  
-  assignEngineer: async (ticketId: number, engineer: Engineer): Promise<void> => {
-    await delay(300)
-    const tickets = getDB()
-    saveDB(tickets.map(t => t.id === ticketId ? { ...t, assignee: engineer } : t))
+  async getTickets(): Promise<Ticket[]> {
+    const { data } = await api.get<TicketRead[]>('/api/tickets')
+    return data.map((ticket) => ({
+      id: ticket.id,
+      title: ticket.title,
+      aiDescription: ticket.ai_description ?? ticket.description,
+      aiSolution: ticket.ai_solution ?? undefined,
+      category: ticket.category_code,
+      status: ticket.status,
+      priority: ticket.priority,
+      assignee: ticket.assignee ? engineerProfile(ticket.assignee) : null,
+      createdAt: ticket.created_at,
+    }))
   },
-  
-  approveTicket: async (ticketId: number): Promise<void> => {
-    await delay(300)
-    const tickets = getDB()
-    saveDB(tickets.map(t => t.id === ticketId ? { ...t, status: 'in_progress' } : t))
+  async getEngineers(): Promise<Engineer[]> {
+    const { data } = await api.get<UserRead[]>('/api/users', { params: { role: 'engineer' } })
+    return data.map(engineerProfile).filter((engineer) => engineer !== null)
   },
-  
-  completeTicket: async (ticketId: number): Promise<void> => {
-    await delay(300)
-    const tickets = getDB()
-    saveDB(tickets.map(t => t.id === ticketId ? { ...t, status: 'closed' } : t))
+  async assignEngineer(id: number, engineer: Engineer): Promise<void> {
+    await api.post(`/api/tickets/${id}/assign`, { engineer_id: engineer.id })
   },
-
-  refuseTicket: async (ticketId: number): Promise<void> => {
-    await delay(300)
-    const tickets = getDB()
-    saveDB(tickets.map(t => t.id === ticketId ? { ...t, status: 'new', assignee: null } : t))
-  },
-
-  // НОВОЕ: Обновление текста ИИ
-  updateAiDescription: async (ticketId: number, newDescription: string): Promise<void> => {
-    await delay(300)
-    const tickets = getDB()
-    saveDB(tickets.map(t => t.id === ticketId ? { ...t, aiDescription: newDescription } : t))
-  }
+  approveTicket: (id: number) => update(id, { status: 'in_progress' }),
+  completeTicket: (id: number) => update(id, { status: 'closed' }),
+  refuseTicket: (id: number) => update(id, { status: 'new', engineer_id: null }),
+  updateAiDescription: (id: number, description: string) =>
+    update(id, { reviewed_description: description }),
 }

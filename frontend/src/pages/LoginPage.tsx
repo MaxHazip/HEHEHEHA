@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { api } from '@/lib/api'
 import { useAuthStore, type Role } from '@/store/authStore'
 import { Ticket, User, Wrench, ArrowLeft, BarChart3, LogIn, AlertCircle } from 'lucide-react'
 
@@ -19,7 +20,7 @@ export default function LoginPage() {
     admin: 'Администратор'
   }
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     const newErrors: { phone?: string; password?: string } = {}
 
@@ -42,13 +43,17 @@ export default function LoginPage() {
 
     // Если ошибок нет — входим
     if (Object.keys(newErrors).length === 0) {
-      let defaultName = 'Пользователь'
-      if (selectedRole === 'engineer') defaultName = 'Иван Сетевой'
-      if (selectedRole === 'dispatcher') defaultName = 'Иван Диспетчеров'
-      if (selectedRole === 'admin') defaultName = 'Администратор'
-      if (selectedRole === 'client') defaultName = 'Клиент'
-
-      login({ name: defaultName, phone, role: selectedRole })
+      try {
+        const { data } = await api.post('/api/users/login', { phone, password })
+        const role = data.role === 'requester' ? 'client' : data.role
+        if (role !== selectedRole) {
+          setErrors({ password: 'Эта учётная запись относится к другой роли' })
+          return
+        }
+        login({ name: data.name, phone: data.phone, role, engineerId: data.engineer_id })
+      } catch {
+        setErrors({ password: 'Не удалось войти. Проверьте телефон, пароль и подключение' })
+      }
     }
   }
 

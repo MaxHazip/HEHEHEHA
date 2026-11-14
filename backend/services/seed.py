@@ -20,32 +20,38 @@ logger = logging.getLogger(__name__)
 
 DEMO_USERS: list[dict] = [
     {
+        "name": "Администратор",
+        "phone": "+79990000001",
+        "role": "admin",
+        "competencies": [],
+    },
+    {
         "name": "Иван Диспетчеров",
-        "email": "+7(999)123-45-67",
+        "phone": "+79991234567",
         "role": "dispatcher",
         "competencies": [],
     },
     {
         "name": "Иван Сетевой",
-        "phone": "+7(321)321-12-12",
+        "phone": "+73213211212",
         "role": "engineer",
         "competencies": ["network", "wifi", "vpn"],
     },
     {
         "name": "Петр Железнов",
-        "email": "+7(999)234-56-78",
+        "phone": "+79992345678",
         "role": "engineer",
         "competencies": ["hardware", "printer", "power"],
     },
     {
         "name": "Анна Программистова",
-        "email": "+7(999)345-67-89",
+        "phone": "+79993456789",
         "role": "engineer",
         "competencies": ["software", "access", "mail"],
     },
     {
         "name": "Заявитель",
-        "email": "+7(999)456-78-90",
+        "phone": "+79994567890",
         "role": "requester",
         "competencies": [],
     },
@@ -118,12 +124,12 @@ async def seed_demo_data(session: AsyncSession) -> None:
 
     for item in DEMO_USERS:
         user = await session.scalar(
-            select(User).where(User.email == item["email"])
+            select(User).where(User.phone == item["phone"])
         )
         if user is None:
             user = User(
                 name=item["name"],
-                email=item["email"],
+                phone=item["phone"],
                 role=item["role"],
                 password_hash=password_hash,
             )

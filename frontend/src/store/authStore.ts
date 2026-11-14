@@ -7,6 +7,7 @@ export type Role = 'client' | 'dispatcher' | 'engineer' | 'admin' | null
 export interface UserProfile {
   name: string
   phone: string
+  engineerId?: number | null
   role: Role
 }
 
@@ -25,6 +26,6 @@ export const useAuthStore = create<AuthState>()(
       login: (user) => set({ role: user.role, user }),
       logout: () => set({ role: null, user: null }),
     }),
-    { name: 'auth-storage' }
+    { name: 'dispatchai-auth-v2' }
   )
 )

@@ -27,6 +27,7 @@ export default function TicketCard({ ticket }: { ticket: Ticket }) {
     setIsEditingDesc(false)
   }
 
+  const awaitingReview = ticket.status === "new" || ticket.status === "draft"
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col gap-4">
       <div className="flex justify-between items-start">
@@ -44,8 +45,8 @@ export default function TicketCard({ ticket }: { ticket: Ticket }) {
           </div>
           <h3 className="text-lg font-semibold text-slate-800">{ticket.title}</h3>
         </div>
-        <span className={`text-xs px-2 py-1 rounded ${ticket.status === 'new' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
-          {ticket.status === 'new' ? 'Ожидает проверки' : 'В работе'}
+        <span className={`text-xs px-2 py-1 rounded ${awaitingReview ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+          {awaitingReview ? 'Ожидает проверки' : ({ in_progress: 'В работе', resolved: 'Решена', closed: 'Закрыта' } as Record<string, string>)[ticket.status]}
         </span>
       </div>
 
@@ -55,7 +56,7 @@ export default function TicketCard({ ticket }: { ticket: Ticket }) {
           <div className="text-xs text-slate-400 flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-purple-500"></span> Анализ ИИ
           </div>
-          {ticket.status === 'new' && !isEditingDesc && (
+          {awaitingReview && !isEditingDesc && (
             <button 
               onClick={() => setIsEditingDesc(true)} 
               className="text-slate-400 hover:text-blue-600 transition"
@@ -113,6 +114,7 @@ export default function TicketCard({ ticket }: { ticket: Ticket }) {
             onBlur={() => setIsEditingEngineer(false)}
             autoFocus
           >
+            <option value="" disabled>Выберите инженера</option>
             {engineers.map((eng) => (
               <option key={eng.id} value={eng.id}>
                 {eng.name} ({eng.specialty})
@@ -134,7 +136,7 @@ export default function TicketCard({ ticket }: { ticket: Ticket }) {
         )}
       </div>
 
-      {ticket.status === 'new' && (
+      {awaitingReview && (
         <button
           onClick={() => approveTicket(ticket.id)}
           disabled={isApproving || isEditingDesc || !descValue.trim()}

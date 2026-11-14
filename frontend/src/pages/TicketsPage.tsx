@@ -2,9 +2,10 @@ import TicketCard from '@/features/tickets/components/TicketCard'
 import { useTickets } from '@/features/tickets/hooks/useTickets'
 
 export default function TicketsPage() {
-  const { data: tickets = [], isLoading } = useTickets()
+  const { data: tickets = [], isLoading, isError } = useTickets()
 
   if (isLoading) return <div className="p-6 text-slate-500">Загрузка заявок...</div>
+  if (isError) return <p role="alert">Не удалось загрузить заявки</p>
 
   return (
     <div className="space-y-6">

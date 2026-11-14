@@ -2,7 +2,12 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from pwdlib import PasswordHash
+
+from backend.services.accounts import get_user_by_phone
+import re
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,3 +48,24 @@ async def list_users(
         if read is not None:
             result.append(read)
     return result
+
+
+class LoginRequest(BaseModel):
+    phone: str = Field(max_length=40)
+    password: str = Field(min_length=1, max_length=256)
+
+
+@router.post("/login", response_model=UserRead)
+async def login(payload: LoginRequest, session: SessionDep) -> UserRead:
+    digits = re.sub(r"[^0-9]", "", payload.phone)
+    if len(digits) == 10:
+        digits = "7" + digits
+    elif len(digits) == 11 and digits.startswith("8"):
+        digits = "7" + digits[1:]
+    user = await get_user_by_phone(session, "+" + digits)
+    if user is None or not user.is_active or not PasswordHash.recommended().verify(
+        payload.password, user.password_hash
+    ):
+        raise HTTPException(status_code=401, detail="Неверный телефон или пароль")
+    engineer_id = await session.scalar(select(Engineer.id).where(Engineer.user_id == user.id))
+    return user_read(user, engineer_id=engineer_id)

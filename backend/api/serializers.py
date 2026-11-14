@@ -47,7 +47,7 @@ def user_read(
         id=user.id,
         name=user.name,
         role=user.role,
-        email=user.email,
+        phone=user.phone,
         specialty=specialty,
         engineer_id=engineer_id,
     )
@@ -226,7 +226,7 @@ async def build_ticket_summary(
         category_code=category.code if category else "none",
         subcategory_code=subcategory.code if subcategory else "none",
         assignee=assignee,
-        ai_description=ai_description,
+        ai_description=ticket.reviewed_description or ai_description,
         ai_solution=ai_solution,
         ai_confidence=(
             analysis.confidence

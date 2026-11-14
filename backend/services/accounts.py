@@ -7,12 +7,12 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import User
 
-DEFAULT_REQUESTER_EMAIL = "requester@dispatch.local"
+DEFAULT_REQUESTER_PHONE = "+79994567890"
 DEFAULT_REQUESTER_NAME = "Заявитель"
 DEMO_PASSWORD = "demo-password"
 
@@ -27,25 +27,25 @@ async def get_user_by_phone(
     session: AsyncSession, phone: str
 ) -> User | None:
     return await session.scalar(
-        select(User).where(func.lower(User.email) == phone.strip())
+        select(User).where(User.phone == phone)
     )
 
 
 async def get_or_create_user(
     session: AsyncSession,
     *,
-    email: str,
+    phone: str,
     name: str,
     role: str,
     password: str = DEMO_PASSWORD,
 ) -> User:
-    user = await get_user_by_phone(session, email)
+    user = await get_user_by_phone(session, phone)
     if user is not None:
         return user
 
     user = User(
-        email=email.strip().lower(),
-        name=name.strip() or email.split("@")[0],
+        phone=phone,
+        name=name.strip() or phone,
         role=role,
         password_hash=hash_password(password),
     )
@@ -57,14 +57,14 @@ async def get_or_create_user(
 async def get_or_create_requester(
     session: AsyncSession,
     *,
-    email: str | None = None,
+    phone: str | None = None,
     name: str | None = None,
 ) -> User:
     """Возвращает заявителя (создаёт служебного при необходимости)."""
 
     return await get_or_create_user(
         session,
-        email=email or DEFAULT_REQUESTER_EMAIL,
+        phone=phone or DEFAULT_REQUESTER_PHONE,
         name=name or DEFAULT_REQUESTER_NAME,
         role="requester",
     )
