@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTickets, useCompleteTicket, useRefuseTicket } from '@/features/tickets/hooks/useTickets'
 import { useAuthStore } from '@/store/authStore'
-import { CheckCircle, XCircle, FileText, Bot, Wrench } from 'lucide-react'
+import { CheckCircle, XCircle, FileText, Bot, Wrench, ShieldAlert } from 'lucide-react'
 import ConfirmModal from '@/components/ConfirmModal'
 import type { Ticket } from '@/types/ticket.types'
 
@@ -12,7 +12,6 @@ export default function EngineerPage() {
   const { mutate: completeTicket, isPending: isCompleting } = useCompleteTicket()
   const { mutate: refuseTicket, isPending: isRefusing } = useRefuseTicket()
 
-  // Состояние для модального окна
   const [actionState, setActionState] = useState<{ ticket: Ticket, action: 'complete' | 'refuse' } | null>(null)
 
   const myTickets = tickets.filter(
@@ -30,34 +29,68 @@ export default function EngineerPage() {
     }
   }
 
-  if (isLoading) return <div className="p-6 text-center text-slate-500 mt-10">Загрузка задач...</div>
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[300px] items-center justify-center">
+        <div className="flex items-center gap-3 text-sm text-gray-400">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-200 border-t-black" />
+          Загружаем задачи...
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="max-w-3xl mx-auto mt-4">
-      <h1 className="text-2xl font-semibold text-slate-800 mb-6 flex items-center gap-2">
-        <Wrench className="text-blue-600" /> Мои задачи
-      </h1>
+    <div className="max-w-4xl mx-auto pb-8">
+      
+      {/* Заголовок (Убрали синий цвет у ключа) */}
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[2px] text-gray-400">
+            Кабинет инженера
+          </div>
+          <h1 className="text-3xl font-semibold tracking-tight text-[#222] flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#242424] text-white">
+              <Wrench size={20} strokeWidth={1.8} />
+            </div>
+            Мои задачи
+          </h1>
+          <p className="mt-2 text-sm text-gray-400">
+            Выполняйте назначенные заявки или отказывайтесь с переназначением.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 rounded-full border border-white bg-white/70 px-4 py-2.5 text-xs text-gray-500 shadow-sm">
+          <CheckCircle size={15} />
+          Активных: {myTickets.length}
+        </div>
+      </div>
       
       {myTickets.length === 0 ? (
-        <div className="bg-white p-10 rounded-xl text-center text-slate-500 border border-slate-200 shadow-sm">
-          У вас пока нет назначенных задач. Ожидайте заявок от диспетчера.
+        <div className="glass-card flex min-h-[280px] flex-col items-center justify-center p-8 text-center">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100">
+            <Wrench size={24} className="text-gray-400" />
+          </div>
+          <h3 className="text-base font-semibold text-[#222]">Задач пока нет</h3>
+          <p className="mt-2 max-w-sm text-sm leading-6 text-gray-400">
+            У вас нет назначенных заявок. Ожидайте, пока диспетчер отправит вам новую задачу.
+          </p>
         </div>
       ) : (
         <div className="space-y-6">
           {myTickets.map((ticket) => (
-            <div key={ticket.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div key={ticket.id} className="glass-card overflow-hidden group hover:border-gray-300 transition duration-200">
               
               {/* Шапка карточки */}
-              <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+              <div className="bg-white/50 px-6 py-4 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3">
                 <div className="flex items-center gap-3">
-                  <span className="bg-blue-100 text-blue-700 text-sm px-3 py-1 rounded-lg font-medium">
+                  <span className="bg-[#242424] text-white text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-md font-semibold">
                     {ticket.category}
                   </span>
-                  <span className="text-slate-400 text-sm">Заявка #{ticket.id}</span>
+                  <span className="text-gray-400 text-xs font-medium">Заявка #{ticket.id}</span>
                 </div>
                 {ticket.priority === 'high' && (
-                  <span className="text-rose-600 text-xs font-bold uppercase tracking-wider bg-rose-50 px-2 py-1 rounded">
-                    Срочно
+                  <span className="flex items-center gap-1.5 text-[#b87979] text-[10px] font-bold uppercase tracking-wider bg-rose-50 px-2.5 py-1 rounded-md border border-rose-100">
+                    <ShieldAlert size={12} /> Срочно
                   </span>
                 )}
               </div>
@@ -65,17 +98,18 @@ export default function EngineerPage() {
               <div className="p-6 space-y-5">
                 {/* Проблема */}
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-800 mb-1">{ticket.title}</h3>
-                  <p className="text-slate-600 text-sm">{ticket.aiDescription}</p>
+                  <h3 className="text-lg font-semibold text-[#222] mb-1">{ticket.title}</h3>
+                  <p className="text-gray-500 text-sm leading-relaxed">{ticket.aiDescription}</p>
                 </div>
 
                 {/* Решение от ИИ */}
                 {ticket.aiSolution && (
-                  <div className="bg-purple-50 border border-purple-100 p-4 rounded-lg">
-                    <div className="flex items-center gap-2 text-purple-700 font-medium mb-2 text-sm">
-                      <Bot size={18} /> Рекомендация нейросети
+                  <div className="bg-[#f8f9fa] border border-gray-200 p-4 rounded-2xl relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-[#242424]"></div>
+                    <div className="flex items-center gap-2 text-[#222] font-semibold mb-2 text-xs uppercase tracking-wider">
+                      <Bot size={16} className="text-gray-500" /> Рекомендация ИИ
                     </div>
-                    <p className="text-sm text-purple-900 leading-relaxed">
+                    <p className="text-sm text-gray-600 leading-relaxed pl-1">
                       {ticket.aiSolution}
                     </p>
                   </div>
@@ -84,16 +118,16 @@ export default function EngineerPage() {
                 {/* Документация */}
                 {ticket.documents && ticket.documents.length > 0 && (
                   <div>
-                    <div className="text-sm font-medium text-slate-700 mb-2">Прикрепленная документация:</div>
+                    <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Документация:</div>
                     <div className="flex flex-wrap gap-2">
                       {ticket.documents.map((doc, idx) => (
                         <a 
                           key={idx} 
                           href="#" 
                           onClick={(e) => { e.preventDefault(); alert(`Открытие файла: ${doc}`) }}
-                          className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg text-sm text-slate-700 transition"
+                          className="flex items-center gap-2 bg-white border border-gray-200 hover:border-gray-400 px-3 py-2 rounded-xl text-xs font-medium text-gray-700 transition shadow-sm"
                         >
-                          <FileText size={16} className="text-blue-500" />
+                          <FileText size={14} className="text-gray-400" />
                           {doc}
                         </a>
                       ))}
@@ -101,21 +135,21 @@ export default function EngineerPage() {
                   </div>
                 )}
 
-                {/* Кнопки действий */}
-                <div className="pt-4 border-t border-slate-100 flex gap-3">
+                {/* Кнопки действий (Обновили стили) */}
+                <div className="pt-5 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
                   <button
                     onClick={() => setActionState({ ticket, action: 'complete' })}
                     disabled={isCompleting || isRefusing}
-                    className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white py-3 rounded-lg font-medium transition"
+                    className="button-dark flex-1 !h-12 disabled:opacity-50"
                   >
                     <CheckCircle size={18} /> Подтвердить выполнение
                   </button>
                   <button
                     onClick={() => setActionState({ ticket, action: 'refuse' })}
                     disabled={isCompleting || isRefusing}
-                    className="flex-1 flex items-center justify-center gap-2 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-50 py-3 rounded-lg font-medium transition"
+                    className="button-light flex-1 !h-12 !border-gray-200 text-gray-600 hover:!text-rose-600 hover:!border-rose-200 hover:!bg-rose-50 disabled:opacity-50"
                   >
-                    <XCircle size={18} /> Отказаться от заявки
+                    <XCircle size={18} /> Отказаться
                   </button>
                 </div>
               </div>

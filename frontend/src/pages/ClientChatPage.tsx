@@ -93,7 +93,6 @@ export default function ClientChatPage() {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-
     const reader = new FileReader()
     reader.onloadend = () => {
       setSelectedImage(reader.result as string)
@@ -163,6 +162,21 @@ export default function ClientChatPage() {
       ])
     } finally {
       setSending(false)
+    }
+  }
+
+  const handleCallEnd = (transcribedText?: string, aiReply?: string) => {
+    setIsCalling(false)
+    if (transcribedText) {
+      const clientVoiceMsg: Message = { id: Date.now(), text: transcribedText, sender: 'user', isVoice: true }
+      setMessages((prev) => [...prev, clientVoiceMsg])
+      
+      if (aiReply) {
+        setTimeout(() => {
+          const aiVoiceMsg: Message = { id: Date.now() + 1, text: aiReply, sender: 'bot', isVoice: true }
+          setMessages((prev) => [...prev, aiVoiceMsg])
+        }, 500)
+      }
     }
   }
 
@@ -290,10 +304,8 @@ export default function ClientChatPage() {
                 className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full p-1 hover:bg-rose-600 transition"
                 title="Удалить фото"
               >
-                <X size={12} />
+                <Phone size={18} />
               </button>
-            </div>
-          )}
 
           <form onSubmit={handleSend} className="flex gap-2">
             <input
@@ -330,6 +342,9 @@ export default function ClientChatPage() {
             </button>
           </form>
         </div>
+
+        {/* Модалка звонка */}
+        <VoiceCallModal isOpen={isCalling} onClose={handleCallEnd} />
       </div>
     </div>
   )
