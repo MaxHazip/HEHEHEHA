@@ -19,14 +19,14 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base  
+from backend.core.database import Base  
 
 if TYPE_CHECKING:
-    from app.models.category import Category
-    from app.models.chat_session import ChatSession
-    from app.models.engineer import Engineer
-    from app.models.subcategory import Subcategory
-    from app.models.user import User
+    from backend.models.categories_models import Category
+    from backend.models.chat_session import ChatSession
+    from backend.models.engineer_models import Engineer
+    from backend.models.subcategories_models import Subcategory
+    from backend.models.user_models import User
 
 
 class TicketStatuses(str, enum.Enum):

@@ -16,10 +16,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base  
+from backend.core.database import Base  
 
 if TYPE_CHECKING:
-    from app.models.chat_session import ChatSession
+    from backend.models.chat_session import ChatSession
 
 
 class ChatMessageRoles(str, enum.Enum):
