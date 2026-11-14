@@ -1,3 +1,4 @@
+"""История запусков ИИ-анализа по сессии/заявке."""
 
 from __future__ import annotations
 
@@ -6,7 +7,6 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
-    BigInteger,
     CheckConstraint,
     DateTime,
     Float,
@@ -17,10 +17,10 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
+from backend.models._types import big_int, jsonb, uuid_pk
 
 if TYPE_CHECKING:
     from backend.models.chat_session import ChatSession
@@ -41,30 +41,22 @@ class TicketAnalysis(Base):
             name="ck_ticket_analyses_version",
         ),
         CheckConstraint(
-            "confidence >= 0 AND confidence <= 1",
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
             name="ck_ticket_analyses_confidence",
         ),
-        CheckConstraint(
-            "jsonb_typeof(result) = 'object'",
-            name="ck_ticket_analyses_result_object",
-        ),
     )
 
-    id: Mapped[int] = mapped_column(
-        BigInteger,
-        primary_key=True,
-        autoincrement=True,
-    )
+    id: Mapped[int] = mapped_column(big_int(), primary_key=True, autoincrement=True)
 
     chat_session_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        uuid_pk(),
         ForeignKey("chat_sessions.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
     ticket_id: Mapped[int | None] = mapped_column(
-        BigInteger,
+        big_int(),
         ForeignKey("tickets.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
@@ -76,20 +68,11 @@ class TicketAnalysis(Base):
         server_default=text("1"),
     )
 
-    model_name: Mapped[str | None] = mapped_column(
-        String(100),
-        nullable=True,
-    )
+    model_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    result: Mapped[dict[str, Any]] = mapped_column(
-        JSONB,
-        nullable=False,
-    )
+    result: Mapped[dict[str, Any]] = mapped_column(jsonb(), nullable=False)
 
-    confidence: Mapped[float | None] = mapped_column(
-        Float(precision=53),
-        nullable=True,
-    )
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

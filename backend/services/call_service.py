@@ -5,11 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_module.core.schemas import TicketAIResult
 from backend.api.serializers import call_detail
-from backend.models import Call, CallTranscriptSegment, Ticket
-from backend.schemas.call_schemas import (
-    CallDetail,
-    TranscriptSegmentRead,
-)
+from backend.models import Call, CallTranscriptSegment, ChatMessage, ChatSession, Ticket
+from backend.schemas.call_schemas import CallDetail, TranscriptSegmentRead
+from backend.services.accounts import get_or_create_requester
 from backend.services.ai_service import analyze_ticket
 
 
@@ -67,14 +65,35 @@ async def ensure_ticket_for_call(
         if ticket is not None:
             return ticket
 
+    requester = await get_or_create_requester(session)
+
+    text = (
+        call.transcript_text
+        or "Обращение по телефону (звонок без расшифровки)"
+    ).strip()
+
+    chat_session = ChatSession(user_id=requester.id, status="active")
+    session.add(chat_session)
+    await session.flush()
+
+    session.add(
+        ChatMessage(
+            session_id=chat_session.id,
+            role="user",
+            content=text,
+        )
+    )
+
     ticket = Ticket(
-        title="Обращение по телефону",
-        description=call.transcript_text or "Входящий звонок",
-        source="phone",
-        client_phone=call.client_phone,
+        chat_session_id=chat_session.id,
+        created_by=requester.id,
+        raw_text=text,
+        channel="voice",
+        status="new",
     )
     session.add(ticket)
     await session.flush()
+
     call.ticket_id = ticket.id
     await session.commit()
     await session.refresh(call)

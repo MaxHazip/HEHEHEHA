@@ -1,5 +1,7 @@
 """Связка backend-моделей и ИИ-модуля."""
 
+from __future__ import annotations
+
 import logging
 
 from pydantic import ValidationError
@@ -25,23 +27,18 @@ from ai_module.core.taxonomy import (
     subcategory_by_code,
 )
 from ai_module.services.image_service import describe_attachment
-from backend.core.settings import settings
 from backend.models import (
-    AIAnalysisRecord,
     Call,
+    Category,
+    ChatMessage,
+    Subcategory,
     Ticket,
+    TicketAnalysis,
     TicketAttachment,
-    TicketMessage,
 )
+from backend.models.ticket import TICKET_PRIORITIES
 
 logger = logging.getLogger(__name__)
-
-GENERIC_TITLES = {
-    "Новое обращение",
-    "Обращение",
-    "Звонок",
-    "Обращение по телефону",
-}
 
 _IMPACT_LABELS = {
     "single_device": "одно устройство",
@@ -52,18 +49,20 @@ _IMPACT_LABELS = {
     "unknown": "неизвестно",
 }
 
+_MASS_SCOPES = ("department", "building", "multiple_buildings")
+
+
+def _truncate(value: str | None, limit: int) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    return text[:limit] if text else None
+
 
 async def _describe_new_images(
     session: AsyncSession, ticket: Ticket
 ) -> None:
-    """Описывает новые скриншоты vision-моделью перед анализом.
-
-    Работает только при настроенном Google-ключе: без него описание
-    не выдумывается, а анализ идёт по тексту.
-    """
-
-    if not settings.google_api_key:
-        return
+    """Описывает новые изображения vision-моделью перед анализом."""
 
     rows = (
         await session.scalars(
@@ -71,13 +70,16 @@ async def _describe_new_images(
                 TicketAttachment.ticket_id == ticket.id,
                 TicketAttachment.kind == "image",
                 TicketAttachment.description.is_(None),
+                TicketAttachment.data.is_not(None),
             )
         )
     ).all()
 
     changed = False
     for row in rows:
-        description = await describe_attachment(row.data, row.mime_type)
+        description = await describe_attachment(
+            row.data or b"", row.mime_type
+        )
         if description:
             row.description = description
             changed = True
@@ -97,20 +99,20 @@ async def build_analysis_request(
 
     rows = (
         await session.scalars(
-            select(TicketMessage)
-            .where(TicketMessage.ticket_id == ticket.id)
-            .order_by(TicketMessage.id)
+            select(ChatMessage)
+            .where(ChatMessage.session_id == ticket.chat_session_id)
+            .order_by(ChatMessage.created_at, ChatMessage.id)
         )
     ).all()
 
     for row in rows:
-        if not row.text.strip():
+        if not row.content.strip():
             continue
-        role = row.role if row.role in ("client", "bot", "dispatcher") else "dispatcher"
-        messages.append(AIMessage(role=role, text=row.text))
+        role = "client" if row.role == "user" else "bot"
+        messages.append(AIMessage(role=role, text=row.content))
 
-    if not messages and ticket.description.strip():
-        messages.append(AIMessage(role="client", text=ticket.description))
+    if not messages and ticket.raw_text.strip():
+        messages.append(AIMessage(role="client", text=ticket.raw_text))
 
     calls = (
         await session.scalars(
@@ -137,7 +139,7 @@ async def build_analysis_request(
         messages.append(AIMessage(role="client", text=extra_text.strip()))
 
     if not messages:
-        messages.append(AIMessage(role="client", text=ticket.title))
+        messages.append(AIMessage(role="client", text=ticket.raw_text))
 
     attachments = (
         await session.scalars(
@@ -160,7 +162,7 @@ async def build_analysis_request(
         if attachment.kind in ("image", "audio", "document")
     ]
 
-    source = ticket.source if ticket.source in ("chat", "web", "phone") else "chat"
+    source = "phone" if ticket.channel == "voice" else "chat"
 
     return AnalysisRequest(
         ticket_id=str(ticket.id),
@@ -226,20 +228,77 @@ def render_summary(result: TicketAIResult) -> str:
     return "\n".join(lines)
 
 
-def build_title(result: TicketAIResult) -> str:
-    category = category_name(result.classification.category_code)
-    subcategory = subcategory_by_code(
-        result.classification.category_code,
-        result.classification.subcategory_code,
+async def latest_analysis(
+    session: AsyncSession, ticket: Ticket
+) -> TicketAnalysis | None:
+    return await session.scalar(
+        select(TicketAnalysis)
+        .where(TicketAnalysis.chat_session_id == ticket.chat_session_id)
+        .order_by(TicketAnalysis.version.desc())
+        .limit(1)
     )
-    room = result.extracted_fields.location.room
 
-    title = category
-    if subcategory:
-        title = f"{category}: {subcategory.name}"
-    if room:
-        title = f"{title} — каб. {room}"
-    return title[:120]
+
+def analysis_result(analysis: TicketAnalysis | None) -> TicketAIResult | None:
+    if analysis is None or not isinstance(analysis.result, dict):
+        return None
+    try:
+        return TicketAIResult.model_validate(analysis.result)
+    except ValidationError:
+        return None
+
+
+async def _apply_classification(
+    session: AsyncSession, ticket: Ticket, result: TicketAIResult
+) -> None:
+    classification = result.classification
+
+    category = await session.scalar(
+        select(Category).where(Category.code == classification.category_code)
+    )
+    ticket.category_id = category.id if category else None
+    ticket.subcategory_id = None
+
+    subcategory_code = classification.subcategory_code
+    if (
+        category is not None
+        and subcategory_code
+        and subcategory_code != "none"
+    ):
+        subcategory = await session.scalar(
+            select(Subcategory).where(
+                Subcategory.category_id == category.id,
+                Subcategory.code == subcategory_code,
+            )
+        )
+        ticket.subcategory_id = subcategory.id if subcategory else None
+
+
+def _apply_result(ticket: Ticket, result: TicketAIResult) -> None:
+    extracted = result.extracted_fields
+
+    ticket.priority = (
+        result.priority.suggested
+        if result.priority.suggested in TICKET_PRIORITIES
+        else None
+    )
+    ticket.symptoms = list(result.issue.symptoms)
+    ticket.attempted_actions = list(result.issue.attempted_actions)
+    ticket.missing_fields = list(result.intake.missing_fields)
+
+    ticket.device = _truncate(extracted.device or extracted.object, 100)
+    ticket.building = _truncate(extracted.location.building, 100)
+    ticket.floor = _truncate(extracted.location.floor, 30)
+    ticket.room = _truncate(extracted.location.room, 50)
+    ticket.host = _truncate(extracted.hostname, 255)
+
+    ticket.is_mass_incident = (
+        result.issue.impact.scope in _MASS_SCOPES
+    )
+    ticket.needs_human_review = result.needs_human_review
+
+    if ticket.status == "draft":
+        ticket.status = "new"
 
 
 async def analyze_ticket(
@@ -252,42 +311,34 @@ async def analyze_ticket(
 ) -> TicketAIResult:
     """Запускает ИИ, сохраняет результат и обновляет заявку."""
 
-    if ticket.ai_analysis and not force:
-        try:
-            return TicketAIResult.model_validate(ticket.ai_analysis)
-        except ValidationError:
-            logger.warning(
-                "Сохранённый анализ заявки %s не прошёл валидацию, пересчитываем.",
-                ticket.id,
-            )
+    if not force:
+        cached = analysis_result(await latest_analysis(session, ticket))
+        if cached is not None:
+            return cached
 
     await _describe_new_images(session, ticket)
     request = await build_analysis_request(session, ticket, extra_text)
     analyzer = get_analyzer()
     result = await analyzer.analyze(request)
 
-    ticket.ai_analysis = result.model_dump(mode="json")
-    ticket.category_code = result.classification.category_code
-    ticket.subcategory_code = result.classification.subcategory_code
-    ticket.priority = result.priority.suggested
-    ticket.needs_human_review = result.needs_human_review
-    ticket.ai_confidence = result.confidence.overall
-    ticket.ai_description = render_summary(result)
-    ticket.ai_solution = (
-        "\n".join(result.decision_notes) if result.decision_notes else None
+    await _apply_classification(session, ticket, result)
+    _apply_result(ticket, result)
+
+    max_version = await session.scalar(
+        select(TicketAnalysis.version)
+        .where(TicketAnalysis.chat_session_id == ticket.chat_session_id)
+        .order_by(TicketAnalysis.version.desc())
+        .limit(1)
     )
 
-    if not ticket.title.strip() or ticket.title in GENERIC_TITLES:
-        ticket.title = build_title(result)
-
     session.add(
-        AIAnalysisRecord(
+        TicketAnalysis(
+            chat_session_id=ticket.chat_session_id,
             ticket_id=ticket.id,
-            call_id=call_id,
-            schema_version=result.schema_version,
-            provider=analyzer.last_provider,
-            model=analyzer.last_model,
+            version=(max_version or 0) + 1,
+            model_name=analyzer.last_model or analyzer.last_provider,
             result=result.model_dump(mode="json"),
+            confidence=result.confidence.overall,
         )
     )
 

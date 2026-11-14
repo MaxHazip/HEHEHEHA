@@ -1,23 +1,24 @@
+"""Профиль инженера: компетенции и текущая нагрузка."""
+
+from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    BigInteger,
     Boolean,
     CheckConstraint,
     ForeignKey,
     Integer,
-    Text,
-    text,
+    true,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
+from backend.models._types import big_int, text_array
 
 if TYPE_CHECKING:
-    from backend.models.user_models import User
     from backend.models.ticket import Ticket
+    from backend.models.user import User
 
 
 class Engineer(Base):
@@ -30,35 +31,33 @@ class Engineer(Base):
         ),
     )
 
-    id: Mapped[int] = mapped_column(
-        BigInteger,
-        primary_key=True,
-        autoincrement=True,
-    )
+    id: Mapped[int] = mapped_column(big_int(), primary_key=True, autoincrement=True)
 
     user_id: Mapped[int] = mapped_column(
-        BigInteger,
+        big_int(),
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
         unique=True,
     )
 
     competencies: Mapped[list[str]] = mapped_column(
-        ARRAY(Text),
+        text_array(),
         nullable=False,
-        server_default=text("'{}'::text[]"),
+        default=list,
     )
 
     load: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
-        server_default=text("0"),
+        default=0,
+        server_default="0",
     )
 
     available: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
-        server_default=text("true"),
+        default=True,
+        server_default=true(),
     )
 
     user: Mapped["User"] = relationship(

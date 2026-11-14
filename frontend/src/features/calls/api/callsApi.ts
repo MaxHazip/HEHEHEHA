@@ -132,7 +132,7 @@ async function saveTranscript(
   await api.put(`/api/calls/${callId}/transcript`, {
     text,
     language: 'ru-RU',
-    provider: 'google-web-speech',
+    provider: 'browser-speech',
     segments: [],
   })
 }
@@ -168,7 +168,7 @@ export async function saveCall(params: SaveCallParams): Promise<SavedCall> {
   let transcriptProvider: string | undefined
   if (transcript) {
     await saveTranscript(callId, transcript)
-    transcriptProvider = 'google-web-speech'
+    transcriptProvider = 'browser-speech'
   } else {
     try {
       const detail = await transcribeCall(callId)

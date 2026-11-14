@@ -77,7 +77,7 @@ export default function CallWidget({
         type: 'transcript',
         text,
         is_final: interim.trim().length === 0,
-        provider: 'browser-google',
+        provider: 'browser-speech',
       }),
     )
   }, [transcript, interim, status])
@@ -173,7 +173,7 @@ export default function CallWidget({
                 Звонок в поддержку
               </div>
               <div className="text-xs text-slate-500">
-                WebRTC + Google Web Speech, fallback — Whisper
+                WebRTC · расшифровка T-one после звонка
               </div>
             </div>
           </div>
@@ -238,17 +238,16 @@ export default function CallWidget({
         )}
 
         {!speechSupported && (
-          <p className="text-xs text-amber-600">
-            Google Web Speech API недоступен в этом браузере. Это не
-            проблема: после звонка backend расшифрует запись локальным
-            Whisper или Google STT.
+          <p className="text-xs text-slate-400 flex items-center gap-1">
+            <Server size={12} /> Живые субтитры в браузере выключены.
+            Расшифровка выполняется локально (T-one) после звонка.
           </p>
         )}
 
         {speechSupported && (
           <p className="text-xs text-slate-400 flex items-center gap-1">
             <Server size={12} /> Если браузер не распознает речь, backend
-            сделает это через Whisper/Google STT.
+            сделает это через T-one.
           </p>
         )}
 

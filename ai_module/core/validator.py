@@ -13,9 +13,6 @@ from ai_module.core.schemas import (
     Classification,
     Confidence,
     ExtractedFields,
-    Impact,
-    Issue,
-    Priority,
     TicketAIResult,
     VisualObservation,
 )
@@ -155,7 +152,7 @@ def _merge_classification(
 
     result.classification = Classification(
         category_id=category.id if category else None,
-        category_code=category_code,
+        category_code=category_code or "none",
         subcategory_id=subcategory.id if subcategory else None,
         subcategory_code=subcategory_code or "none",
         status=status,  # type: ignore[arg-type]
@@ -429,7 +426,7 @@ def apply_operator_overrides(
             )
         result.classification = Classification(
             category_id=category.id if category else None,
-            category_code=category_code,
+            category_code=category_code or "none",
             subcategory_id=subcategory.id if subcategory else None,
             subcategory_code=subcategory_code or "none",
             status=(

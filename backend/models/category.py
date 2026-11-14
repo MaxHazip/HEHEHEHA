@@ -1,17 +1,17 @@
+"""Справочник основных категорий неисправностей."""
+
+from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import (
-    BigInteger,
-    CheckConstraint,
-    String,
-)
+from sqlalchemy import CheckConstraint, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
+from backend.models._types import big_int
 
 if TYPE_CHECKING:
-    from backend.models.subcategories_models import Subcategory
+    from backend.models.subcategory import Subcategory
     from backend.models.ticket import Ticket
 
 
@@ -20,31 +20,20 @@ class Category(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "length(btrim(code)) > 0",
+            "length(trim(code)) > 0",
             name="ck_categories_code_not_blank",
         ),
         CheckConstraint(
-            "length(btrim(name)) > 0",
+            "length(trim(name)) > 0",
             name="ck_categories_name_not_blank",
         ),
     )
 
-    id: Mapped[int] = mapped_column(
-        BigInteger,
-        primary_key=True,
-        autoincrement=True,
-    )
+    id: Mapped[int] = mapped_column(big_int(), primary_key=True, autoincrement=True)
 
-    code: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        unique=True,
-    )
+    code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
 
-    name: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
 
     subcategories: Mapped[list["Subcategory"]] = relationship(
         "Subcategory",

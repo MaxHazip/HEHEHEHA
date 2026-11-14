@@ -35,12 +35,19 @@ interface SpeechRecognitionLike {
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
 
+// Браузерное распознавание (Google Web Speech) выключено по умолчанию:
+// расшифровка выполняется локально T-one после звонка. Включить можно
+// переменной окружения VITE_BROWSER_SPEECH=true.
+const BROWSER_SPEECH_ENABLED =
+  import.meta.env.VITE_BROWSER_SPEECH === 'true'
+
 interface SpeechWindow {
   SpeechRecognition?: SpeechRecognitionConstructor
   webkitSpeechRecognition?: SpeechRecognitionConstructor
 }
 
 function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null {
+  if (!BROWSER_SPEECH_ENABLED) return null
   const speechWindow = window as unknown as SpeechWindow
   return (
     speechWindow.SpeechRecognition ??
@@ -60,9 +67,10 @@ function pickMimeType(): string {
 }
 
 /**
- * Захват микрофона через WebRTC (getUserMedia) + запись MediaRecorder
- * + потоковая расшифровка через Google Web Speech API (Chrome/Edge).
- * Аудио никуда не уходит до явного сохранения звонка.
+ * Захват микрофона через WebRTC (getUserMedia) + запись MediaRecorder.
+ * Расшифровка по умолчанию выполняется на backend локальной моделью
+ * T-one после звонка. Браузерный Google Web Speech — опционально
+ * (VITE_BROWSER_SPEECH=true). Аудио никуда не уходит до сохранения.
  */
 export function useCallRecorder() {
   const [status, setStatus] = useState<CallStatus>('idle')
@@ -193,8 +201,8 @@ export function useCallRecorder() {
             )
           } else if (event.error === 'network') {
             setError(
-              'Google Web Speech API недоступен (сеть или блокировка). ' +
-                'После звонка запись расшифрует серверный Whisper/Google STT.',
+              'Браузерное распознавание недоступно. После звонка запись ' +
+                'расшифрует локальный T-one на backend.',
             )
           } else if (event.error === 'audio-capture') {
             setError('Микрофон не найден или занят другим приложением.')

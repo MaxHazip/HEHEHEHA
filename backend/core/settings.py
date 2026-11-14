@@ -7,8 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
 
-    DATABASE_URL: str
-    ALEMBIC_DATABASE_URL: str
+    DATABASE_URL: str = "sqlite+aiosqlite:///./dispatcher.db"
+    # Необязателен: если не задан, используется DATABASE_URL.
+    ALEMBIC_DATABASE_URL: str | None = None
 
     APP_NAME: str = "DispatchAI"
     APP_VERSION: str = "0.1.0"
@@ -28,34 +29,85 @@ class Settings(BaseSettings):
     MAX_UPLOAD_MB: int = 30
     MAX_AUDIO_MB: int = 60
 
-    # Демо-пользователи (диспетчер/инженер) при первом запуске.
+    # Демо-пользователи и справочники при первом запуске.
     SEED_DEMO_DATA: bool = True
 
-    # auto -> Gemini, если задан ключ, иначе офлайн-анализатор.
+    # ------------------------------------------------------------------
+    # Текстовая модель (текст -> структурированный JSON)
+    # auto | ollama | openai | gemini | rule
+    # ------------------------------------------------------------------
     AI_PROVIDER: str = "auto"
     AI_AUTO_ANALYZE: bool = True
+    AI_TIMEOUT_SECONDS: float = 60.0
+
+    # Google Gemini (облачный резерв, если локальная модель не нужна).
     GOOGLE_API_KEY: str | None = None
     GEMINI_API_KEY: str | None = None
     GEMINI_MODEL: str = "gemini-2.5-flash"
     GOOGLE_STT_LANGUAGE: str = "ru-RU"
-    AI_TIMEOUT_SECONDS: float = 20.0
 
-    # Локальная текстовая модель (Ollama / OpenAI-совместимый сервер).
+    # Ollama: локальные Qwen3 / Qwen3-VL.
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "qwen2.5:7b-instruct"
+    OLLAMA_MODEL: str = "qwen3:8b"
+    OLLAMA_THINK: bool = False
+    OLLAMA_NUM_CTX: int = 8192
+    OLLAMA_NUM_PREDICT: int = 1024
+    OLLAMA_KEEP_ALIVE: str = "5m"
+
+    # Любой локальный OpenAI-совместимый сервер (LM Studio, vLLM, ...).
     OPENAI_BASE_URL: str | None = None
     OPENAI_API_KEY: str | None = None
     OPENAI_MODEL: str | None = None
 
-    # Распознавание речи: auto | local | http | google | none.
+    # ------------------------------------------------------------------
+    # Распознавание речи: T-one (локально) / Whisper / Google
+    # auto | tone | http | local | google | none
+    # ------------------------------------------------------------------
     SPEECH_PROVIDER: str = "auto"
+    SPEECH_TIMEOUT_SECONDS: float = 120.0
+
+    # T-one — локальная русскоязычная ASR-модель, поднимается отдельным
+    # HTTP-сервером (не через Ollama).
+    TONE_BASE_URL: str | None = None
+    TONE_API_KEY: str | None = None
+    TONE_MODEL: str = "t-one"
+    TONE_ENDPOINT: str = "/audio/transcriptions"
+    TONE_FILE_FIELD: str = "file"
+    TONE_LANGUAGE: str = "ru"
+    TONE_TIMEOUT_SECONDS: float = 120.0
+
+    # HTTP Whisper (faster-whisper-server), OpenAI-совместимый API.
     WHISPER_BASE_URL: str | None = None
     WHISPER_API_KEY: str | None = None
     WHISPER_HTTP_MODEL: str = "Systran/faster-whisper-small"
+
+    # Локальный faster-whisper прямо в процессе backend.
     WHISPER_MODEL: str = "small"
     WHISPER_DEVICE: str = "auto"
     WHISPER_COMPUTE_TYPE: str = "int8"
     WHISPER_LANGUAGE: str = "ru"
+
+    # ------------------------------------------------------------------
+    # Синтез речи: Silero TTS (отдельный HTTP-сервер)
+    # silero | none
+    # ------------------------------------------------------------------
+    TTS_PROVIDER: str = "silero"
+    TTS_ENABLED: bool = True
+    SILERO_TTS_URL: str | None = None
+    SILERO_TTS_ENDPOINT: str = "/tts"
+    SILERO_SPEAKER: str = "aidar"
+    SILERO_LANGUAGE: str = "ru"
+    SILERO_SAMPLE_RATE: int = 48000
+    SILERO_TIMEOUT_SECONDS: float = 60.0
+
+    # ------------------------------------------------------------------
+    # Распознавание изображений (vision): Qwen3-VL через Ollama
+    # auto | ollama | gemini | none
+    # ------------------------------------------------------------------
+    VISION_PROVIDER: str = "auto"
+    OLLAMA_VISION_MODEL: str = "qwen3-vl:8b"
+    GEMINI_VISION_MODEL: str | None = None
+    VISION_TIMEOUT_SECONDS: float = 120.0
 
     # SIP-шлюз (Asterisk/FreeSWITCH/облачная АТС) присылает события сюда.
     SIP_WEBHOOK_TOKEN: str | None = None
@@ -84,10 +136,22 @@ class Settings(BaseSettings):
         "GOOGLE_STT_LANGUAGE",
         "OLLAMA_BASE_URL",
         "OLLAMA_MODEL",
+        "OLLAMA_THINK",
+        "OLLAMA_NUM_CTX",
+        "OLLAMA_NUM_PREDICT",
+        "OLLAMA_KEEP_ALIVE",
         "OPENAI_BASE_URL",
         "OPENAI_API_KEY",
         "OPENAI_MODEL",
         "SPEECH_PROVIDER",
+        "SPEECH_TIMEOUT_SECONDS",
+        "TONE_BASE_URL",
+        "TONE_API_KEY",
+        "TONE_MODEL",
+        "TONE_ENDPOINT",
+        "TONE_FILE_FIELD",
+        "TONE_LANGUAGE",
+        "TONE_TIMEOUT_SECONDS",
         "WHISPER_BASE_URL",
         "WHISPER_API_KEY",
         "WHISPER_HTTP_MODEL",
@@ -95,6 +159,18 @@ class Settings(BaseSettings):
         "WHISPER_DEVICE",
         "WHISPER_COMPUTE_TYPE",
         "WHISPER_LANGUAGE",
+        "TTS_PROVIDER",
+        "TTS_ENABLED",
+        "SILERO_TTS_URL",
+        "SILERO_TTS_ENDPOINT",
+        "SILERO_SPEAKER",
+        "SILERO_LANGUAGE",
+        "SILERO_SAMPLE_RATE",
+        "SILERO_TIMEOUT_SECONDS",
+        "VISION_PROVIDER",
+        "OLLAMA_VISION_MODEL",
+        "GEMINI_VISION_MODEL",
+        "VISION_TIMEOUT_SECONDS",
         "SIP_WEBHOOK_TOKEN",
         "SIP_AUTO_ANALYZE",
     )
@@ -112,6 +188,10 @@ class Settings(BaseSettings):
     @property
     def google_api_key(self) -> str | None:
         return self.GOOGLE_API_KEY or self.GEMINI_API_KEY
+
+    @property
+    def alembic_database_url(self) -> str:
+        return self.ALEMBIC_DATABASE_URL or self.DATABASE_URL
 
     @property
     def max_upload_bytes(self) -> int:

@@ -21,14 +21,21 @@ from sqlalchemy.orm import defer
 from ai_module.core.schemas import TicketAIResult
 from backend.api.serializers import (
     attachment_read,
+    build_ticket_detail,
+    build_ticket_summary,
     call_summary,
     message_read,
-    ticket_detail,
-    ticket_summary,
 )
 from backend.core.database import get_session
 from backend.core.settings import settings
-from backend.models import Call, Ticket, TicketAttachment, TicketMessage, User
+from backend.models import (
+    Call,
+    ChatMessage,
+    ChatSession,
+    Engineer,
+    Ticket,
+    TicketAttachment,
+)
 from backend.schemas.ai_schemas import AnalyzeTicketRequest
 from backend.schemas.ticket_schemas import (
     AttachmentRead,
@@ -40,7 +47,9 @@ from backend.schemas.ticket_schemas import (
     TicketDetail,
     TicketSummary,
     TicketUpdate,
+    normalize_role,
 )
+from backend.services.accounts import get_or_create_requester
 from backend.services.ai_service import analyze_ticket
 from backend.services.storage import (
     UploadTooLargeError,
@@ -62,59 +71,17 @@ async def get_ticket_or_404(session: AsyncSession, ticket_id: int) -> Ticket:
     return ticket
 
 
-async def _assignee(session: AsyncSession, ticket: Ticket) -> User | None:
-    if ticket.assignee_id is None:
-        return None
-    return await session.get(User, ticket.assignee_id)
-
-
-async def _build_detail(session: AsyncSession, ticket: Ticket) -> TicketDetail:
-    assignee = await _assignee(session, ticket)
-
-    messages = (
+async def _session_messages(
+    session: AsyncSession, ticket: Ticket
+) -> list[ChatMessage]:
+    rows = (
         await session.scalars(
-            select(TicketMessage)
-            .where(TicketMessage.ticket_id == ticket.id)
-            .order_by(TicketMessage.id)
+            select(ChatMessage)
+            .where(ChatMessage.session_id == ticket.chat_session_id)
+            .order_by(ChatMessage.created_at, ChatMessage.id)
         )
     ).all()
-
-    attachments = (
-        await session.scalars(
-            select(TicketAttachment)
-            .options(defer(TicketAttachment.data))
-            .where(TicketAttachment.ticket_id == ticket.id)
-            .order_by(TicketAttachment.id)
-        )
-    ).all()
-    attachment_reads = [attachment_read(item) for item in attachments]
-
-    by_message: dict[int, list[AttachmentRead]] = {}
-    for item in attachment_reads:
-        if item.message_id is not None:
-            by_message.setdefault(item.message_id, []).append(item)
-
-    message_reads = [
-        message_read(message, by_message.get(message.id))
-        for message in messages
-    ]
-
-    calls = (
-        await session.scalars(
-            select(Call)
-            .options(defer(Call.recording_data))
-            .where(Call.ticket_id == ticket.id)
-            .order_by(Call.id)
-        )
-    ).all()
-
-    return ticket_detail(
-        ticket,
-        assignee,
-        message_reads,
-        attachment_reads,
-        [call_summary(call) for call in calls],
-    )
+    return list(rows)
 
 
 @router.post(
@@ -127,37 +94,40 @@ async def create_ticket(
     payload: TicketCreate,
     session: SessionDep,
 ) -> TicketDetail:
-    if not payload.title and not payload.description.strip():
+    text = (payload.description or payload.title or "").strip()
+    if not text:
         raise HTTPException(
             status_code=422,
             detail="Нужен заголовок или описание обращения",
         )
 
-    title = (payload.title or payload.description.strip()[:60]).strip()
-    ticket = Ticket(
-        title=title[:255] or "Новое обращение",
-        description=payload.description.strip(),
-        source=payload.source,
-        priority=payload.priority,
-        client_name=payload.client_name,
-        client_phone=payload.client_phone,
-    )
-    session.add(ticket)
+    requester = await get_or_create_requester(session)
+
+    chat_session = ChatSession(user_id=requester.id, status="active")
+    session.add(chat_session)
     await session.flush()
 
-    if payload.description.strip():
-        session.add(
-            TicketMessage(
-                ticket_id=ticket.id,
-                role="client",
-                text=payload.description.strip(),
-            )
+    session.add(
+        ChatMessage(
+            session_id=chat_session.id,
+            role="user",
+            content=text,
         )
+    )
 
+    ticket = Ticket(
+        chat_session_id=chat_session.id,
+        created_by=requester.id,
+        raw_text=text,
+        channel="voice" if payload.source == "phone" else "chat",
+        status="draft",
+        priority=payload.priority,
+    )
+    session.add(ticket)
     await session.commit()
     await session.refresh(ticket)
 
-    if settings.AI_AUTO_ANALYZE and payload.description.strip():
+    if settings.AI_AUTO_ANALYZE:
         try:
             await analyze_ticket(session, ticket, force=True)
         except Exception:  # noqa: BLE001
@@ -166,7 +136,7 @@ async def create_ticket(
                 "Автоматический ИИ-анализ не удался для заявки %s", ticket.id
             )
 
-    return await _build_detail(session, ticket)
+    return await build_ticket_detail(session, ticket)
 
 
 @router.get(
@@ -189,27 +159,17 @@ async def list_tickets(
     if priority:
         stmt = stmt.where(Ticket.priority == priority)
     if assignee_id is not None:
-        stmt = stmt.where(Ticket.assignee_id == assignee_id)
+        stmt = stmt.where(Ticket.engineer_id == assignee_id)
 
-    stmt = stmt.order_by(Ticket.created_at.desc()).limit(min(limit, 200)).offset(offset)
+    stmt = (
+        stmt.order_by(Ticket.created_at.desc())
+        .limit(min(limit, 200))
+        .offset(offset)
+    )
     tickets = (await session.scalars(stmt)).all()
 
-    assignee_ids = {
-        ticket.assignee_id for ticket in tickets if ticket.assignee_id is not None
-    }
-    assignees: dict[int, User] = {}
-    if assignee_ids:
-        users = (
-            await session.scalars(select(User).where(User.id.in_(assignee_ids)))
-        ).all()
-        assignees = {user.id: user for user in users}
-
     return [
-        ticket_summary(
-            ticket,
-            assignees.get(ticket.assignee_id) if ticket.assignee_id else None,
-        )
-        for ticket in tickets
+        await build_ticket_summary(session, ticket) for ticket in tickets
     ]
 
 
@@ -220,7 +180,7 @@ async def list_tickets(
 )
 async def read_ticket(ticket_id: int, session: SessionDep) -> TicketDetail:
     ticket = await get_ticket_or_404(session, ticket_id)
-    return await _build_detail(session, ticket)
+    return await build_ticket_detail(session, ticket)
 
 
 @router.patch(
@@ -236,23 +196,23 @@ async def update_ticket(
     ticket = await get_ticket_or_404(session, ticket_id)
     data = payload.model_dump(exclude_unset=True)
 
-    if "assignee_id" in data and data["assignee_id"] is not None:
-        user = await session.get(User, data["assignee_id"])
-        if user is None:
-            raise HTTPException(status_code=404, detail="Исполнитель не найден")
+    if data.get("engineer_id") is not None:
+        engineer = await session.get(Engineer, data["engineer_id"])
+        if engineer is None:
+            raise HTTPException(status_code=404, detail="Инженер не найден")
 
     for field, value in data.items():
         setattr(ticket, field, value)
 
     await session.commit()
     await session.refresh(ticket)
-    return await _build_detail(session, ticket)
+    return await build_ticket_detail(session, ticket)
 
 
 @router.post(
     "/{ticket_id}/assign",
     response_model=TicketDetail,
-    summary="Назначить исполнителя",
+    summary="Назначить инженера",
 )
 async def assign_ticket(
     ticket_id: int,
@@ -260,13 +220,13 @@ async def assign_ticket(
     session: SessionDep,
 ) -> TicketDetail:
     ticket = await get_ticket_or_404(session, ticket_id)
-    user = await session.get(User, payload.assignee_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="Исполнитель не найден")
-    ticket.assignee_id = user.id
+    engineer = await session.get(Engineer, payload.engineer_id)
+    if engineer is None:
+        raise HTTPException(status_code=404, detail="Инженер не найден")
+    ticket.engineer_id = engineer.id
     await session.commit()
     await session.refresh(ticket)
-    return await _build_detail(session, ticket)
+    return await build_ticket_detail(session, ticket)
 
 
 @router.get(
@@ -279,13 +239,7 @@ async def list_messages(
 ) -> list[MessageRead]:
     ticket = await get_ticket_or_404(session, ticket_id)
 
-    messages = (
-        await session.scalars(
-            select(TicketMessage)
-            .where(TicketMessage.ticket_id == ticket.id)
-            .order_by(TicketMessage.id)
-        )
-    ).all()
+    messages = await _session_messages(session, ticket)
     attachments = (
         await session.scalars(
             select(TicketAttachment)
@@ -302,7 +256,7 @@ async def list_messages(
             )
 
     return [
-        message_read(message, by_message.get(message.id))
+        message_read(message, ticket.id, by_message.get(message.id))
         for message in messages
     ]
 
@@ -321,13 +275,16 @@ async def add_message(
 ) -> MessageRead:
     ticket = await get_ticket_or_404(session, ticket_id)
 
-    if not payload.text.strip() and not payload.attachment_ids:
+    text = payload.text.strip()
+    if not text and not payload.attachment_ids:
         raise HTTPException(status_code=422, detail="Сообщение пустое")
 
-    message = TicketMessage(
-        ticket_id=ticket.id,
-        role=payload.role,
-        text=payload.text.strip(),
+    message = ChatMessage(
+        session_id=ticket.chat_session_id,
+        role=normalize_role(payload.role),
+        # content не может быть пустым: для сообщения-только-с-файлом
+        # подставляем служебную подпись.
+        content=text or "[вложение]",
     )
     session.add(message)
     await session.flush()
@@ -353,12 +310,13 @@ async def add_message(
             )
         for row in rows:
             row.message_id = message.id
+            row.ticket_id = ticket.id
             attachments.append(row)
 
     await session.commit()
     await session.refresh(message)
 
-    if analyze and payload.role == "client":
+    if analyze and message.role == "user":
         try:
             await analyze_ticket(session, ticket, force=True)
         except Exception:  # noqa: BLE001
@@ -367,7 +325,7 @@ async def add_message(
             )
 
     return message_read(
-        message, [attachment_read(item) for item in attachments]
+        message, ticket.id, [attachment_read(item) for item in attachments]
     )
 
 
@@ -408,8 +366,11 @@ async def upload_attachment(
     ticket = await get_ticket_or_404(session, ticket_id)
 
     if message_id is not None:
-        message = await session.get(TicketMessage, message_id)
-        if message is None or message.ticket_id != ticket.id:
+        message = await session.get(ChatMessage, message_id)
+        if (
+            message is None
+            or message.session_id != ticket.chat_session_id
+        ):
             raise HTTPException(
                 status_code=404, detail="Сообщение не найдено в этой заявке"
             )
@@ -423,17 +384,20 @@ async def upload_attachment(
 
     filename = safe_filename(file.filename)
     mime_type = guess_mime(filename, file.content_type)
-    attachment_kind = kind if kind in ("image", "audio", "document") else detect_kind(
-        mime_type, filename
+    attachment_kind = (
+        kind
+        if kind in ("image", "audio", "document")
+        else detect_kind(mime_type, filename)
     )
 
     attachment = TicketAttachment(
         ticket_id=ticket.id,
         message_id=message_id,
         kind=attachment_kind,
-        filename=filename,
+        file_name=filename,
+        storage_path=f"db://tickets/{ticket.id}/{filename}",
         mime_type=mime_type,
-        size_bytes=len(data),
+        file_size=len(data),
         sha256=hashlib.sha256(data).hexdigest(),
         data=data,
         description=description,

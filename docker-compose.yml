@@ -38,16 +38,34 @@ services:
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,https://localhost:5173
       AI_PROVIDER: ${AI_PROVIDER:-auto}
       AI_AUTO_ANALYZE: ${AI_AUTO_ANALYZE:-true}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-60}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b-instruct}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:8b}
+      OLLAMA_THINK: ${OLLAMA_THINK:-false}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-8192}
+      # Vision: Qwen3-VL через Ollama
+      VISION_PROVIDER: ${VISION_PROVIDER:-auto}
+      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-qwen3-vl:8b}
+      # Речь: T-one и Silero TTS обычно запускаются на хосте.
       SPEECH_PROVIDER: ${SPEECH_PROVIDER:-auto}
+      TONE_BASE_URL: ${TONE_BASE_URL:-http://host.docker.internal:8002}
+      TONE_MODEL: ${TONE_MODEL:-t-one}
+      TONE_ENDPOINT: ${TONE_ENDPOINT:-/audio/transcriptions}
+      TONE_FILE_FIELD: ${TONE_FILE_FIELD:-file}
+      TONE_LANGUAGE: ${TONE_LANGUAGE:-ru}
       WHISPER_BASE_URL: ${WHISPER_BASE_URL:-}
       WHISPER_MODEL: ${WHISPER_MODEL:-small}
       WHISPER_DEVICE: ${WHISPER_DEVICE:-auto}
       WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
       WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ru}
+      TTS_PROVIDER: ${TTS_PROVIDER:-silero}
+      TTS_ENABLED: ${TTS_ENABLED:-true}
+      SILERO_TTS_URL: ${SILERO_TTS_URL:-http://host.docker.internal:8003}
+      SILERO_TTS_ENDPOINT: ${SILERO_TTS_ENDPOINT:-/tts}
+      SILERO_SPEAKER: ${SILERO_SPEAKER:-aidar}
+      SILERO_SAMPLE_RATE: ${SILERO_SAMPLE_RATE:-48000}
       SIP_WEBHOOK_TOKEN: ${SIP_WEBHOOK_TOKEN:-}
       SIP_AUTO_ANALYZE: ${SIP_AUTO_ANALYZE:-true}
       ARI_ENABLED: ${ARI_ENABLED:-false}

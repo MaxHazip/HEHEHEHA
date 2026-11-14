@@ -47,18 +47,23 @@ async def download_attachment(
     session: SessionDep,
 ) -> Response:
     attachment = await _get_or_404(session, attachment_id)
+    if attachment.data is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Файл хранится вне БД и недоступен по этому адресу",
+        )
     return file_response(
         request,
         attachment.data,
         attachment.mime_type,
-        attachment.filename,
+        attachment.file_name,
     )
 
 
 @router.post(
     "/{attachment_id}/describe",
     response_model=AttachmentRead,
-    summary="Описать изображение с помощью Gemini",
+    summary="Описать изображение локальной vision-моделью (Qwen3-VL)",
 )
 async def describe_image(
     attachment_id: int, session: SessionDep
@@ -69,6 +74,10 @@ async def describe_image(
         raise HTTPException(
             status_code=422, detail="Описать можно только изображение"
         )
+    if attachment.data is None:
+        raise HTTPException(
+            status_code=422, detail="Изображение не хранится в БД"
+        )
 
     description = await describe_attachment(
         attachment.data, attachment.mime_type
@@ -77,8 +86,8 @@ async def describe_image(
         raise HTTPException(
             status_code=503,
             detail=(
-                "Vision-модель не настроена: задайте GOOGLE_API_KEY "
-                "и включите Gemini API"
+                "Vision-модель не настроена. Задайте VISION_PROVIDER=ollama "
+                "и OLLAMA_VISION_MODEL (например, qwen3-vl:8b) или ключ Gemini."
             ),
         )
 

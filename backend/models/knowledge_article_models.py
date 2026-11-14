@@ -1,3 +1,4 @@
+"""База знаний: статьи для рекомендаций инженеру."""
 
 from __future__ import annotations
 
@@ -5,18 +6,16 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    BigInteger,
     CheckConstraint,
     DateTime,
     String,
     Text,
     func,
-    text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
+from backend.models._types import big_int, text_array
 
 if TYPE_CHECKING:
     from backend.models.ticket_kb_article_models import TicketKBArticle
@@ -27,45 +26,31 @@ class KnowledgeArticle(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "length(btrim(code)) > 0",
+            "length(trim(code)) > 0",
             name="ck_knowledge_articles_code_not_blank",
         ),
         CheckConstraint(
-            "length(btrim(title)) > 0",
+            "length(trim(title)) > 0",
             name="ck_knowledge_articles_title_not_blank",
         ),
         CheckConstraint(
-            "length(btrim(body)) > 0",
+            "length(trim(body)) > 0",
             name="ck_knowledge_articles_body_not_blank",
         ),
     )
 
-    id: Mapped[int] = mapped_column(
-        BigInteger,
-        primary_key=True,
-        autoincrement=True,
-    )
+    id: Mapped[int] = mapped_column(big_int(), primary_key=True, autoincrement=True)
 
-    code: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-        unique=True,
-    )
+    code: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
 
-    title: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    body: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
 
     keywords: Mapped[list[str]] = mapped_column(
-        ARRAY(Text),
+        text_array(),
         nullable=False,
-        server_default=text("'{}'::text[]"),
+        default=list,
     )
 
     created_at: Mapped[datetime] = mapped_column(

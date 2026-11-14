@@ -1,14 +1,14 @@
 """Распознавание речи.
 
 Провайдеры:
-1. ``http``   — локальный OpenAI-совместимый Whisper-сервер
-   (faster-whisper-server, whisper.cpp с OpenAI API и т.п.).
-2. ``local``  — пакет ``faster-whisper`` прямо в backend-процессе.
-3. ``google`` — Google Cloud Speech-to-Text (нужен API-ключ).
+1. ``tone``   — локальная модель T-one через HTTP-сервер (основной путь);
+2. ``http``   — локальный OpenAI-совместимый Whisper-сервер;
+3. ``local``  — пакет ``faster-whisper`` прямо в backend-процессе;
+4. ``google`` — Google Cloud Speech-to-Text (облачный резерв).
 
-Режим задаётся ``SPEECH_PROVIDER``: ``auto | local | http | google | none``.
-В ``auto`` backend пробует доступные варианты по порядку, а браузерный
-Web Speech API остаётся самым быстрым путём (он работает на frontend).
+Режим задаётся ``SPEECH_PROVIDER``: ``auto | tone | http | local | google | none``.
+T-one не является частью Ollama — это отдельный сервер инференса,
+который отдаёт OpenAI-совместимый эндпоинт транскрибации.
 """
 
 import asyncio
@@ -76,6 +76,8 @@ def _provider_sequence(mode: str | None = None) -> list[str]:
 
     if mode == "none":
         return []
+    if mode == "tone":
+        return ["tone"]
     if mode == "google":
         return ["google"]
     if mode == "local":
@@ -85,6 +87,8 @@ def _provider_sequence(mode: str | None = None) -> list[str]:
 
     # auto (и любое неизвестное значение)
     providers: list[str] = []
+    if os.getenv("TONE_BASE_URL"):
+        providers.append("tone")
     if os.getenv("WHISPER_BASE_URL"):
         providers.append("http")
     if _faster_whisper_available():
@@ -99,10 +103,113 @@ def speech_status() -> dict:
 
     return {
         "mode": os.getenv("SPEECH_PROVIDER", "auto"),
+        "tone": bool(os.getenv("TONE_BASE_URL")),
         "local_faster_whisper": _faster_whisper_available(),
         "http_whisper": bool(os.getenv("WHISPER_BASE_URL")),
         "google_stt": bool(_google_key()),
         "providers": _provider_sequence(),
+    }
+
+
+def _normalize_segments(raw: Any) -> list[dict]:
+    if not isinstance(raw, list):
+        return []
+
+    segments: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+
+        text = str(
+            item.get("text") or item.get("transcript") or ""
+        ).strip()
+        if not text:
+            continue
+
+        if item.get("start_ms") is not None:
+            start_ms = int(item["start_ms"])
+        elif item.get("start") is not None:
+            start_ms = int(float(item["start"]) * 1000)
+        else:
+            start_ms = None
+
+        if item.get("end_ms") is not None:
+            end_ms = int(item["end_ms"])
+        elif item.get("end") is not None:
+            end_ms = int(float(item["end"]) * 1000)
+        else:
+            end_ms = None
+
+        segments.append(
+            {
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "text": text,
+                "speaker": item.get("speaker"),
+                "confidence": item.get("confidence"),
+            }
+        )
+    return segments
+
+
+async def _transcribe_tone(
+    data: bytes,
+    mime_type: str,
+    language: str,
+) -> dict:
+    base_url = os.getenv("TONE_BASE_URL")
+    if not base_url:
+        raise SpeechProviderError("TONE_BASE_URL не задан")
+
+    endpoint = os.getenv("TONE_ENDPOINT", "/audio/transcriptions")
+    base_url = base_url.rstrip("/")
+    url = base_url if base_url.endswith(endpoint) else f"{base_url}{endpoint}"
+
+    headers: dict[str, str] = {}
+    if os.getenv("TONE_API_KEY"):
+        headers["Authorization"] = f"Bearer {os.getenv('TONE_API_KEY')}"
+
+    base_mime = _base_mime(mime_type)
+    suffix = _SUFFIX_BY_MIME.get(base_mime, ".webm")
+    file_field = os.getenv("TONE_FILE_FIELD", "file")
+
+    form = {
+        "model": os.getenv("TONE_MODEL", "t-one"),
+        "language": os.getenv("TONE_LANGUAGE", "ru"),
+        "response_format": "verbose_json",
+    }
+
+    timeout = float(os.getenv("TONE_TIMEOUT_SECONDS", "120"))
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                url,
+                data=form,
+                files={file_field: (f"call{suffix}", data, base_mime)},
+                headers=headers,
+            )
+            response.raise_for_status()
+            payload = response.json()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("T-one request failed: %s", exc)
+        raise SpeechProviderError(
+            "Локальный сервер T-one недоступен. Проверьте TONE_BASE_URL."
+        ) from exc
+
+    text = payload.get("text") or payload.get("transcription")
+    if isinstance(text, dict):
+        text = text.get("text")
+    if not isinstance(text, str):
+        text = ""
+
+    segments = _normalize_segments(payload.get("segments"))
+    text = text.strip() or " ".join(s["text"] for s in segments).strip()
+
+    return {
+        "text": text,
+        "provider": "t-one",
+        "language": payload.get("language") or language,
+        "segments": segments,
     }
 
 
@@ -135,7 +242,7 @@ async def _transcribe_google(
         "audio": {"content": base64.b64encode(data).decode("ascii")},
     }
 
-    timeout = float(os.getenv("AI_TIMEOUT_SECONDS", "20")) + 20
+    timeout = float(os.getenv("AI_TIMEOUT_SECONDS", "60")) + 20
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
@@ -198,7 +305,7 @@ async def _transcribe_http(
 
     try:
         async with httpx.AsyncClient(
-            timeout=float(os.getenv("AI_TIMEOUT_SECONDS", "20")) + 60
+            timeout=float(os.getenv("AI_TIMEOUT_SECONDS", "60")) + 60
         ) as client:
             response = await client.post(
                 url,
@@ -214,33 +321,19 @@ async def _transcribe_http(
             "Локальный Whisper-сервер недоступен"
         ) from exc
 
-    segments: list[dict] = []
-    for item in payload.get("segments") or []:
-        try:
-            start = float(item.get("start", 0))
-            end = float(item.get("end", 0))
-        except (TypeError, ValueError):
-            continue
-        segments.append(
-            {
-                "start_ms": int(start * 1000),
-                "end_ms": int(end * 1000),
-                "text": str(item.get("text", "")).strip(),
-                "speaker": None,
-                "confidence": None,
-            }
-        )
-
     return {
         "text": str(payload.get("text", "")).strip(),
         "provider": "whisper-http",
         "language": payload.get("language") or language,
-        "segments": segments,
+        "segments": _normalize_segments(payload.get("segments")),
     }
 
 
 def _load_whisper_model() -> tuple[str, Any]:
-    from faster_whisper import WhisperModel  # noqa: PLC0415
+    # Опциональная зависимость: импортируем динамически, чтобы проект
+    # работал и без установленного faster-whisper.
+    faster_whisper = importlib.import_module("faster_whisper")
+    WhisperModel = faster_whisper.WhisperModel
 
     name = os.getenv("WHISPER_MODEL", "small")
     device = os.getenv("WHISPER_DEVICE", "auto")
@@ -350,12 +443,13 @@ async def transcribe_audio(
     providers = _provider_sequence()
     if not providers:
         raise SpeechProviderError(
-            "Распознавание речи не настроено. Установите faster-whisper, "
-            "задайте WHISPER_BASE_URL (локальный Whisper-сервер) или "
-            "GOOGLE_API_KEY (Google Speech-to-Text)."
+            "Распознавание речи не настроено. Поднимите сервер T-one и "
+            "задайте TONE_BASE_URL, установите faster-whisper, задайте "
+            "WHISPER_BASE_URL или GOOGLE_API_KEY."
         )
 
     handlers = {
+        "tone": _transcribe_tone,
         "google": _transcribe_google,
         "http": _transcribe_http,
         "local": _transcribe_local,

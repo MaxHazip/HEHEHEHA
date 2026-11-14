@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ai_module.providers.speech_provider import speech_status
+from ai_module.providers.tts_provider import tts_status
+from ai_module.providers.vision_provider import vision_status
 from backend.api.routes import (
     ai,
     attachments,
@@ -14,6 +16,7 @@ from backend.api.routes import (
     telephony,
     tickets,
     users,
+    voice,
 )
 from backend.core.database import create_session_maker, init_db
 from backend.core.settings import settings
@@ -36,10 +39,10 @@ async def lifespan(_app: FastAPI):
     ari_runner.start()
 
     logger.info(
-        "Backend готов: DB=%s, AI_PROVIDER=%s, Gemini=%s, ARI=%s",
+        "Backend готов: DB=%s, AI_PROVIDER=%s, OLLAMA_MODEL=%s, ARI=%s",
         settings.DATABASE_URL.split("://")[0],
         settings.AI_PROVIDER,
-        "да" if settings.google_api_key else "нет",
+        settings.OLLAMA_MODEL,
         "вкл" if settings.ARI_ENABLED else "выкл",
     )
     yield
@@ -68,6 +71,7 @@ app.include_router(calls.router)
 app.include_router(telephony.router)
 app.include_router(ai.router)
 app.include_router(users.router)
+app.include_router(voice.router)
 
 
 @app.get("/", tags=["system"])
@@ -81,10 +85,11 @@ async def health() -> dict:
         "status": "ok",
         "version": settings.APP_VERSION,
         "database": settings.DATABASE_URL.split("://")[0],
-        "ai_provider": (
-            "gemini" if settings.google_api_key else "rule-based"
-        ),
+        "ai_provider": settings.AI_PROVIDER,
+        "ai_model": settings.OLLAMA_MODEL,
         "speech": speech_status(),
+        "vision": vision_status(),
+        "tts": tts_status(),
         "telephony": {
             "sip_webhook_enabled": bool(settings.SIP_WEBHOOK_TOKEN),
             "ari": ari_runner.status(),

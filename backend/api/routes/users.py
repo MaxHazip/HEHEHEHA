@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.serializers import user_read
 from backend.core.database import get_session
-from backend.models import User
+from backend.models import Engineer, User
 from backend.schemas.ticket_schemas import UserRead
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -26,4 +26,20 @@ async def list_users(
     stmt = stmt.order_by(User.id)
 
     users = (await session.scalars(stmt)).all()
-    return [user_read(user) for user in users if user_read(user) is not None]
+
+    result: list[UserRead] = []
+    for user in users:
+        specialty = None
+        engineer_id = None
+        if user.role == "engineer":
+            engineer = await session.scalar(
+                select(Engineer).where(Engineer.user_id == user.id)
+            )
+            if engineer is not None:
+                engineer_id = engineer.id
+                if engineer.competencies:
+                    specialty = engineer.competencies[0]
+        read = user_read(user, specialty, engineer_id)
+        if read is not None:
+            result.append(read)
+    return result

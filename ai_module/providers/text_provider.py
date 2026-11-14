@@ -1,13 +1,13 @@
-"""Текстовые модели.
+"""Текстовые модели: локальный Qwen3 через Ollama и совместимые API.
 
-Основной вариант — Google Gemini. Если ключ не задан, используется
-офлайн-анализатор на правилах (см. ``core.analyzer``), поэтому демо
-работает без сети и без платных API.
+Основной вариант — локальная модель Qwen3, поднятая в Ollama. Если она
+недоступна, анализатор автоматически откатывается на офлайн-правила,
+поэтому демо работает без сети и без платных API.
 """
 
 import logging
 import os
-from typing import Protocol
+from typing import Any, Protocol
 
 import httpx
 
@@ -28,11 +28,20 @@ class TextProviderError(RuntimeError):
 
 
 class TextProvider(Protocol):
-    name: str
-    model: str | None
+    # Атрибуты намеренно слабо типизированы: у разных провайдеров
+    # ``model`` бывает str или None, а Protocol инвариантен.
+    name: Any
+    model: Any
 
     async def analyze(self, request: AnalysisRequest) -> dict:
         ...
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
 
 
 class RuleBasedTextProvider:
@@ -52,7 +61,7 @@ class GeminiTextProvider:
         self,
         api_key: str,
         model: str = "gemini-2.5-flash",
-        timeout: float = 20.0,
+        timeout: float = 60.0,
     ) -> None:
         self.api_key = api_key
         self.model = model
@@ -106,8 +115,8 @@ class OllamaTextProvider:
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
-        model: str = "qwen2.5:7b-instruct",
-        timeout: float = 60.0,
+        model: str = "qwen3:8b",
+        timeout: float = 120.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -125,7 +134,14 @@ class OllamaTextProvider:
             ],
             "stream": False,
             "format": "json",
-            "options": {"temperature": 0.2},
+            # Для Qwen3 отключаем «размышления», чтобы получить чистый JSON.
+            "think": _env_flag("OLLAMA_THINK", False),
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "5m"),
+            "options": {
+                "temperature": 0.2,
+                "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),
+                "num_predict": int(os.getenv("OLLAMA_NUM_PREDICT", "1024")),
+            },
         }
 
         try:
@@ -141,7 +157,7 @@ class OllamaTextProvider:
             logger.warning("Ollama request failed: %s", exc)
             raise TextProviderError(
                 "Локальная модель Ollama недоступна. Проверьте, что "
-                "ollama запущена и модель загружена."
+                "Ollama запущена и модель загружена."
             ) from exc
 
 
@@ -159,7 +175,7 @@ class OpenAICompatibleTextProvider:
         base_url: str,
         model: str,
         api_key: str | None = None,
-        timeout: float = 60.0,
+        timeout: float = 120.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -208,21 +224,21 @@ def build_text_provider(provider: str | None = None) -> TextProvider:
     """Выбирает провайдера по настройкам окружения.
 
     ``AI_PROVIDER``:
-    - ``auto`` — Gemini при наличии ключа, иначе офлайн-правила;
-    - ``gemini`` — Google Gemini;
+    - ``auto`` — локальная Ollama (Qwen3), иначе офлайн-правила;
     - ``ollama`` — локальная Ollama;
     - ``openai`` — локальный OpenAI-совместимый сервер;
+    - ``gemini`` — Google Gemini (облако);
     - ``rule`` — только офлайн-анализатор.
     """
 
     mode = (provider or os.getenv("AI_PROVIDER", "auto")).strip().lower()
     api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-    timeout = float(os.getenv("AI_TIMEOUT_SECONDS", "20"))
+    timeout = float(os.getenv("AI_TIMEOUT_SECONDS", "60"))
 
     if mode == "ollama":
         return OllamaTextProvider(
             base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-            model=os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct"),
+            model=os.getenv("OLLAMA_MODEL", "qwen3:8b"),
             timeout=max(timeout, 60.0),
         )
 
@@ -242,17 +258,25 @@ def build_text_provider(provider: str | None = None) -> TextProvider:
         )
         return RuleBasedTextProvider()
 
-    if mode in ("auto", "gemini") and api_key:
-        return GeminiTextProvider(
-            api_key=api_key,
-            model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
-            timeout=timeout,
-        )
-
-    if mode == "gemini" and not api_key:
+    if mode == "gemini":
+        if api_key:
+            return GeminiTextProvider(
+                api_key=api_key,
+                model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+                timeout=timeout,
+            )
         logger.warning(
             "AI_PROVIDER=gemini, но GOOGLE_API_KEY не задан. "
             "Используется офлайн-анализатор."
         )
+        return RuleBasedTextProvider()
 
-    return RuleBasedTextProvider()
+    if mode == "rule":
+        return RuleBasedTextProvider()
+
+    # auto: локальная модель приоритетнее облака.
+    return OllamaTextProvider(
+        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        model=os.getenv("OLLAMA_MODEL", "qwen3:8b"),
+        timeout=max(timeout, 60.0),
+    )

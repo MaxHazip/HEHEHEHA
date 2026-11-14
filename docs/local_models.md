@@ -1,194 +1,448 @@
-# Локальные нейросети: текст и речь
+# Локальные ИИ-модели: пошаговая инструкция
 
-Система умеет работать полностью локально: без Google-ключа и без
-внешних API. Ниже — как подключить модели.
+Система работает полностью локально, без Google и платных API.
 
-## 1. Текстовая модель (анализ заявок)
+| Задача | Модель | Как запускается | Переменные |
+|---|---|---|---|
+| Текст → структурированный JSON | **Qwen3** | Ollama | `OLLAMA_MODEL` |
+| Распознавание изображений | **Qwen3-VL** | Ollama | `OLLAMA_VISION_MODEL` |
+| Распознавание речи (STT) | **T-one** | отдельный HTTP-сервер | `TONE_*` |
+| Синтез речи (TTS) | **Silero TTS** | отдельный HTTP-сервер | `SILERO_*` |
 
-### Вариант A: Ollama
+> **Важно.** Ollama умеет обслуживать только LLM и vision-модели
+> (Qwen3, Qwen3-VL). T-one и Silero TTS — это отдельные модели со своим
+> инференсом, их нельзя «загрузить в Ollama». Для них поднимаются
+> небольшие HTTP-сервисы, а backend обращается к ним по HTTP.
+
+Схема взаимодействия:
+
+```mermaid
+flowchart LR
+    FE[Frontend] --> API[FastAPI backend]
+    API -->|/api/chat| OL[Ollama<br/>Qwen3 + Qwen3-VL]
+    API -->|/audio/transcriptions| TONE[T-one server]
+    API -->|/tts| SIL[Silero TTS server]
+    API --> DB[(PostgreSQL / SQLite)]
+```
+
+---
+
+## 0. Что подготовить заранее
+
+- Python **3.13+** — для backend.
+- Ollama **0.9+** — для Qwen3 и Qwen3-VL.
+- Для GPU: драйвер NVIDIA + CUDA (для Ollama — `nvidia-container-toolkit`,
+  если Ollama в Docker).
+- Свободное место: Qwen3 8B ≈ 5 ГБ, Qwen3-VL 8B ≈ 6 ГБ, Silero TTS ≈ 1 ГБ.
+
+Ориентиры по видеопамяти (квантование Q4):
+
+| Модель | VRAM | Когда выбирать |
+|---|---|---|
+| `qwen3:4b` | ~4 ГБ | слабая машина / CPU |
+| `qwen3:8b` | ~7 ГБ | рекомендуемый баланс |
+| `qwen3:14b` | ~11 ГБ | качество выше, 12+ ГБ VRAM |
+| `qwen3:32b` | ~22 ГБ | максимум качества, 24 ГБ VRAM |
+| `qwen3-vl:8b` | ~8 ГБ | изображения |
+
+На CPU всё тоже работает, но медленнее (первый ответ — десятки секунд).
+
+---
+
+## 1. Ollama
+
+### 1.1 Установка
+
+**Linux / macOS:**
 
 ```bash
-# на своей машине
 curl -fsSL https://ollama.com/install.sh | sh
-ollama pull qwen2.5:7b-instruct
-
-# проверка
-ollama run qwen2.5:7b-instruct "Ответь одним словом: ok"
 ```
 
-`backend/.env`:
+**Проверка:**
+
+```bash
+ollama --version
+curl -s http://localhost:11434/api/tags
+```
+
+Если сервер не стартовал сам:
+
+```bash
+ollama serve
+```
+
+`ollama serve` открывает `http://127.0.0.1:11434`. Если backend в Docker,
+а Ollama на хосте, либо запускайте Ollama в Docker (см. 1.4), либо
+разрешите доступ снаружи:
+
+```bash
+OLLAMA_HOST=0.0.0.0:11434 ollama serve
+```
+
+### 1.2 Qwen3 — текст → JSON
+
+Скачайте модель (один раз):
+
+```bash
+ollama pull qwen3:8b
+```
+
+Проверка, что модель отвечает:
+
+```bash
+ollama run qwen3:8b "Ответь одним словом: ok"
+ollama list
+```
+
+Проверка JSON-режима (именно так backend вызывает модель):
+
+```bash
+curl -s http://localhost:11434/api/chat -d '{
+  "model": "qwen3:8b",
+  "stream": false,
+  "format": "json",
+  "think": false,
+  "messages": [
+    {"role": "user", "content": "Верни JSON {\"ok\": true}"}
+  ]
+}'
+```
+
+В ответе будет `message.content` — строка с JSON.
+
+Укажите в `backend/.env`:
 
 ```env
-AI_PROVIDER=ollama
+AI_PROVIDER=auto          # auto = Ollama, если она доступна
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b-instruct
-AI_TIMEOUT_SECONDS=60
+OLLAMA_MODEL=qwen3:8b
+OLLAMA_THINK=false        # Qwen3 не должен «размышлять» вокруг JSON
+OLLAMA_NUM_CTX=8192
+OLLAMA_NUM_PREDICT=1024
 ```
 
-Перезапустить backend. Анализ пойдёт через Ollama; при недоступности
-модели backend автоматически откатится на офлайн-правила.
+`OLLAMA_THINK=false` важен: иначе Qwen3 может вернуть рассуждения до/после
+JSON. Backend и так вырезает JSON из ответа, но с `false` стабильнее.
 
-Подойдут и другие модели: `qwen2.5:3b-instruct` (быстрее, слабее),
-`llama3.1:8b-instruct`, `gemma2:9b`.
+Другие варианты модели: `qwen3:4b`, `qwen3:14b`, `qwen3:32b`,
+`qwen3:30b-a3b` (MoE, быстрее при большом качестве).
 
-### Вариант B: Docker Compose
+### 1.3 Qwen3-VL — изображения
+
+```bash
+ollama pull qwen3-vl:8b
+```
+
+Проверка через API (изображение передаётся base64 в поле `images`):
+
+```bash
+IMG=$(base64 -w0 screenshot.png)
+curl -s http://localhost:11434/api/chat -d "{
+  \"model\": \"qwen3-vl:8b\",
+  \"stream\": false,
+  \"think\": false,
+  \"messages\": [{
+    \"role\": \"user\",
+    \"content\": \"Опиши неисправность на изображении по-русски\",
+    \"images\": [\"$IMG\"]
+  }]
+}"
+```
+
+В `backend/.env`:
+
+```env
+VISION_PROVIDER=auto
+OLLAMA_VISION_MODEL=qwen3-vl:8b
+VISION_TIMEOUT_SECONDS=120
+```
+
+Проверка через приложение:
+
+```bash
+# 1. создайте заявку и узнайте её id
+curl -s -X POST http://localhost:8000/api/tickets \
+  -H 'Content-Type: application/json' \
+  -d '{"description":"Не работает принтер","source":"chat"}'
+
+# 2. загрузите фото
+curl -s -X POST http://localhost:8000/api/tickets/1/attachments \
+  -F file=@screen.png
+
+# 3. попросите описание
+curl -s -X POST http://localhost:8000/api/attachments/1/describe
+```
+
+### 1.4 Ollama в Docker (альтернатива)
+
+В репозитории уже есть профиль `ollama`:
 
 ```bash
 docker compose --profile ollama up -d
-docker compose exec ollama ollama pull qwen2.5:7b-instruct
+docker compose exec ollama ollama pull qwen3:8b
+docker compose exec ollama ollama pull qwen3-vl:8b
+docker compose exec ollama ollama list
 ```
 
-В `web` уже проброшен `OLLAMA_BASE_URL=http://ollama:11434`.
-Запуск backend с локальной моделью:
+В `docker-compose.yml` у сервиса `web` уже задано
+`OLLAMA_BASE_URL=http://ollama:11434`. Если backend запускается на хосте,
+оставьте `http://localhost:11434`.
+
+---
+
+## 2. T-one — распознавание речи (STT)
+
+T-one — русскоязычная ASR-модель от Т-Банка (open source). Она **не**
+входит в Ollama. Backend обращается к ней как к HTTP-серверу,
+совместимому с OpenAI `/audio/transcriptions`.
+
+### 2.1 Контракт сервера
+
+Сервер должен принимать `multipart/form-data`:
+
+| Поле | Значение |
+|---|---|
+| `file` (или `TONE_FILE_FIELD`) | аудиофайл |
+| `model` | `t-one` |
+| `language` | `ru` |
+| `response_format` | `verbose_json` |
+
+И возвращать JSON:
+
+```json
+{
+  "text": "распознанный текст",
+  "language": "ru",
+  "segments": [
+    {"start": 0.0, "end": 2.4, "text": "первый фрагмент"}
+  ]
+}
+```
+
+Достаточно и `{"text": "..."}` — `segments` опциональны.
+
+### 2.2 Запуск
+
+1. Склонируйте официальный репозиторий T-one и установите зависимости
+   по его README (PyTorch + веса модели).
+2. Оберните инференс в HTTP-сервер с контрактом выше. Готовый шаблон —
+   `deploy/tone/README.md`.
+3. Запустите его на порту `8002`:
 
 ```bash
-AI_PROVIDER=ollama docker compose up -d web
+uvicorn server:app --host 0.0.0.0 --port 8002
 ```
 
-### Вариант C: OpenAI-совместимый сервер
+4. Проверьте:
 
-Подходит LM Studio, llama.cpp server, vLLM, LocalAI.
+```bash
+curl -s http://localhost:8002/audio/transcriptions \
+  -F file=@sample.wav \
+  -F model=t-one \
+  -F language=ru \
+  -F response_format=verbose_json
+```
+
+5. В `backend/.env`:
 
 ```env
-AI_PROVIDER=openai
-OPENAI_BASE_URL=http://localhost:1234/v1
-OPENAI_MODEL=qwen2.5-7b-instruct
-OPENAI_API_KEY=
+SPEECH_PROVIDER=auto        # tone -> whisper-http -> local -> google
+TONE_BASE_URL=http://localhost:8002
+TONE_MODEL=t-one
+TONE_ENDPOINT=/audio/transcriptions
+TONE_FILE_FIELD=file
+TONE_LANGUAGE=ru
+TONE_TIMEOUT_SECONDS=120
 ```
 
-`OPENAI_BASE_URL` должен включать `/v1`.
-
-## 2. Распознавание речи
-
-### Почему не работает Web Speech API
-
-`SpeechRecognition`/`webkitSpeechRecognition` в Chrome и Edge — это
-Google-сервис, но у него жёсткие условия:
-
-1. **Только Chrome/Edge** (Firefox и Safari его не поддерживают).
-2. **Secure context**: `http://localhost` или `https://`. На
-   `http://192.168.x.x` браузер блокирует и микрофон, и распознавание.
-3. **Нужен доступ к серверам Google**. Если сеть блокирует
-   `speech.googleapis.com`, распознавания не будет.
-4. Микрофон должен быть разрешён в настройках браузера.
-
-Виджет звонка теперь показывает конкретную причину, а если браузер не
-дал текст — backend расшифровывает сохранённую запись сам.
-
-### Вариант A (рекомендуется): локальный Whisper-сервер
-
-Работает с Python 3.14, не тянет тяжёлые зависимости в backend.
+6. Проверка через приложение:
 
 ```bash
-# из корня проекта
+curl -s -X POST http://localhost:8000/api/voice/transcribe \
+  -F file=@sample.wav \
+  -F language=ru-RU
+```
+
+Если ваш сервер T-one уже отдаёт OpenAI-совместимый API, обёртка не
+нужна — просто укажите его адрес в `TONE_BASE_URL`.
+
+### 2.3 Резервные варианты
+
+`SPEECH_PROVIDER=auto` перебирает настроенные провайдеры по порядку:
+`tone → whisper-http → faster-whisper (local) → google`. Пока T-one не
+поднят, можно временно использовать Whisper:
+
+```bash
 docker compose --profile whisper up -d
 ```
 
-Сервис поднимается на `http://localhost:8001` с OpenAI-совместимым API.
-
-`backend/.env`:
-
 ```env
-SPEECH_PROVIDER=http
 WHISPER_BASE_URL=http://localhost:8001/v1
-WHISPER_HTTP_MODEL=Systran/faster-whisper-small
-WHISPER_LANGUAGE=ru
 ```
 
-Если backend тоже в Docker, используйте
-`WHISPER_BASE_URL=http://whisper:8000/v1`.
+---
+
+## 3. Silero TTS — синтез речи
+
+Silero TTS тоже запускается отдельным сервером. В репозитории есть
+готовый сервер: `deploy/silero/tts_server.py`.
+
+### 3.1 Установка
+
+```bash
+cd deploy/silero
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Для GPU установите PyTorch с CUDA по инструкции с <https://pytorch.org>.
+
+Первый запуск скачает модель с `torch.hub` (нужен интернет один раз).
+
+### 3.2 Запуск
+
+```bash
+uvicorn tts_server:app --host 0.0.0.0 --port 8003
+```
 
 Проверка:
 
 ```bash
-curl -s http://localhost:8001/v1/audio/transcriptions \
-  -F file=@sample.wav \
-  -F model=Systran/faster-whisper-small \
-  -F language=ru
+curl -s -X POST http://localhost:8003/tts \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Здравствуйте! Чем могу помочь?","speaker":"aidar"}' \
+  --output speech.wav
+
+file speech.wav   # WAV audio
 ```
 
-### Вариант B: faster-whisper прямо в backend
-
-```bash
-pip install faster-whisper
-```
+### 3.3 Настройка backend
 
 ```env
-SPEECH_PROVIDER=local
-WHISPER_MODEL=small
-WHISPER_DEVICE=auto
-WHISPER_COMPUTE_TYPE=int8
-WHISPER_LANGUAGE=ru
+TTS_PROVIDER=silero
+TTS_ENABLED=true
+SILERO_TTS_URL=http://localhost:8003
+SILERO_TTS_ENDPOINT=/tts
+SILERO_SPEAKER=aidar
+SILERO_LANGUAGE=ru
+SILERO_SAMPLE_RATE=48000
 ```
 
-- `WHISPER_MODEL`: `tiny`, `base`, `small`, `medium`, `large-v3`;
-- `WHISPER_DEVICE`: `cpu`, `cuda` или `auto`;
-- `WHISPER_COMPUTE_TYPE`: `int8` для CPU, `float16` для GPU.
-
-Модель скачивается с HuggingFace при первом вызове (нужен интернет).
-Для Python 3.14 колёса `ctranslate2` могут отсутствовать — тогда
-используйте HTTP-вариант (A).
-
-### Вариант C: Google Cloud Speech-to-Text
-
-```env
-SPEECH_PROVIDER=google
-GOOGLE_API_KEY=...
-GOOGLE_STT_LANGUAGE=ru-RU
-```
-
-Нужен включённый Speech-to-Text API. Синхронный метод ограничен ~1
-минутой аудио.
-
-### Как это работает в звонке
-
-1. Браузер пишет `webm/opus` и пытается распознать речь сам.
-2. При завершении звонка запись загружается в БД.
-3. Если браузерного текста нет, frontend вызывает
-   `POST /api/calls/{id}/transcribe`.
-4. Backend пробует провайдеров по порядку (`auto`):
-   HTTP Whisper → локальный faster-whisper → Google STT.
-5. Текст и таймкоды сохраняются в `calls` и `call_transcript_segments`.
-6. Запускается ИИ-анализ и создаётся/обновляется заявка.
-
-Проверить, что видит backend:
+Проверка через приложение:
 
 ```bash
-curl -s http://localhost:8000/api/health
+curl -s -X POST http://localhost:8000/api/voice/tts \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Здравствуйте! Опишите проблему."}' \
+  --output reply.wav
 ```
 
-В ответе будет блок `speech`:
+Голоса Silero (`v3_1_ru`): `aidar`, `baya`, `kseniya`, `xenia`, `eugene`,
+`random`. Список зависит от версии модели.
+
+---
+
+## 4. Порядок запуска (кратко)
+
+```bash
+# 1. Ollama + модели
+ollama serve &
+ollama pull qwen3:8b
+ollama pull qwen3-vl:8b
+
+# 2. T-one (свой сервер по контракту)
+uvicorn server:app --port 8002 &
+
+# 3. Silero TTS
+cd deploy/silero && uvicorn tts_server:app --port 8003 &
+
+# 4. Backend
+cd HEHEHEHA
+cp backend/.env.example backend/.env
+uvicorn backend.main:app --reload --port 8000
+```
+
+Схема БД создаётся автоматически: при старте backend выполняет
+`alembic upgrade head`. Вручную:
+
+```bash
+alembic upgrade head
+alembic current
+```
+
+---
+
+## 5. Проверка, что всё подключено
+
+```bash
+curl -s http://localhost:8000/api/health | python -m json.tool
+```
+
+Ожидаемые поля:
 
 ```json
 {
-  "mode": "auto",
-  "local_faster_whisper": false,
-  "http_whisper": true,
-  "google_stt": false,
-  "providers": ["http"]
+  "status": "ok",
+  "ai_provider": "auto",
+  "ai_model": "qwen3:8b",
+  "speech": {"tone": true, "providers": ["tone"]},
+  "vision": {"ollama_vision_model": "qwen3-vl:8b"},
+  "tts": {"provider": "silero", "silero_url": "http://localhost:8003"}
 }
 ```
 
-## 3. Vision (скриншоты)
-
-Для описания изображений используется Gemini (`GOOGLE_API_KEY`).
-Локальную vision-модель можно добавить тем же способом, что и текстовую:
-через Ollama (например, `llava`) — это следующий шаг, сейчас endpoint
-`POST /api/attachments/{id}/describe` использует Gemini.
-
-## 4. Полезные команды
+Функциональные проверки:
 
 ```bash
-# backend
-uvicorn backend.main:app --reload --port 8000
+# текст -> JSON
+curl -s -X POST http://localhost:8000/api/ai/analyze-text \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"В 305 кабинете не работает интернет, перезагрузка не помогла"}'
 
-# frontend с микрофоном на localhost
-cd frontend && npm run dev
+# речь -> текст
+curl -s -X POST http://localhost:8000/api/voice/transcribe -F file=@sample.wav
 
-# frontend по HTTPS для доступа с другого устройства
-cd frontend && npm run dev:https
+# текст -> речь
+curl -s -X POST http://localhost:8000/api/voice/tts \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Проверка синтеза речи"}' --output out.wav
+
+# полный голосовой цикл: T-one -> Qwen3 -> Silero
+curl -s -X POST http://localhost:8000/api/voice/chat \
+  -F file=@sample.wav \
+  -F language=ru-RU | python -m json.tool
 ```
 
-Для HTTPS-режима браузер покажет предупреждение о самоподписанном
-сертификате — примите его. Origin `https://<IP>:5173` разрешён
-регуляркой CORS по умолчанию.
+---
+
+## 6. Диагностика проблем
+
+| Симптом | Причина / решение |
+|---|---|
+| `backend` пишет «офлайн-анализ» | Ollama не отвечает. `ollama list`, `curl localhost:11434/api/tags`, проверьте `OLLAMA_BASE_URL`. |
+| `model "qwen3:8b" not found` | Не выполнен `ollama pull qwen3:8b`. |
+| Qwen3 возвращает не JSON | `OLLAMA_THINK=false`, `format: json`, уменьшите `temperature`. Backend всё равно нормализует ответ. |
+| Модель падает / OOM | Возьмите модель меньше (`qwen3:4b`, `qwen3-vl:2b`), закройте другие GPU-процессы. |
+| Первый ответ очень долгий | Модель грузится в память. Дальше работает `OLLAMA_KEEP_ALIVE=5m`. |
+| Backend в Docker не видит Ollama на хосте | Используйте профиль `ollama` в compose или `host.docker.internal` (`extra_hosts` уже настроен). |
+| T-one 503 | Сервер не запущен / неверный `TONE_BASE_URL`/`TONE_ENDPOINT`. Проверьте curl напрямую. |
+| TTS 503 | `SILERO_TTS_URL` пуст, `TTS_ENABLED=false` или сервер не отвечает. |
+| Микрофон не работает в браузере | Нужен Chrome/Edge и secure context (`localhost` или HTTPS). |
+| `alembic: table already exists` | Осталась старая БД. Удалите `dispatcher.db` (SQLite) или пересоздайте volume Postgres. |
+
+---
+
+## 7. Полностью локальный режим
+
+```env
+AI_PROVIDER=ollama
+VISION_PROVIDER=ollama
+SPEECH_PROVIDER=tone
+TTS_PROVIDER=silero
+GOOGLE_API_KEY=
+GEMINI_API_KEY=
+```
+
+Ни один запрос не уходит в интернет (кроме первичной загрузки моделей).
