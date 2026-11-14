@@ -9,6 +9,7 @@ import pytest
 _TMP_DIR = tempfile.mkdtemp(prefix="dispatchai-tests-")
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_TMP_DIR}/test.db"
 os.environ["SEED_DEMO_DATA"] = "false"
+os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-dispatchai-auth-32-bytes-minimum"
 os.environ["AI_PROVIDER"] = "rule"
 os.environ["SPEECH_PROVIDER"] = "none"
 os.environ["SIP_WEBHOOK_TOKEN"] = "test-telephony-token"
@@ -26,6 +27,19 @@ PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"test-image"
 @pytest.fixture(scope="module")
 def client():
     with TestClient(app) as test_client:
+
+        registered = test_client.post(
+            "/api/auth/register",
+            json={
+                "name": "Тестовый заявитель",
+                "phone": "+79990000099",
+                "password": "TestPass123!",
+            },
+        )
+        assert registered.status_code == 201, registered.text
+        token = registered.json()["access_token"]
+        test_client.headers["Authorization"] = f"Bearer {token}"
+        test_client.auth_token = token
         yield test_client
 
 
@@ -239,13 +253,17 @@ def test_websocket_live_transcript(client: TestClient) -> None:
     call_id = created.json()["id"]
 
     with client.websocket_connect(
-        f"/api/calls/{call_id}/signal?role=client"
+
+        f"/api/calls/{call_id}/signal?role=client&access_token={client.auth_token}"
+
     ) as ws_client:
         assert ws_client.receive_json()["type"] == "connected"
         assert ws_client.receive_json()["type"] == "snapshot"
 
         with client.websocket_connect(
-            f"/api/calls/{call_id}/signal?role=dispatcher"
+
+            f"/api/calls/{call_id}/signal?role=dispatcher&access_token={client.auth_token}"
+
         ) as ws_dispatcher:
             assert ws_dispatcher.receive_json()["type"] == "connected"
             assert ws_dispatcher.receive_json()["type"] == "snapshot"
@@ -265,3 +283,21 @@ def test_websocket_live_transcript(client: TestClient) -> None:
     detail = client.get(f"/api/calls/{call_id}")
     assert detail.status_code == 200
     assert detail.json()["transcript_text"] == "Проверка live-субтитров"
+
+
+def test_auth_rejects_invalid_credentials(client: TestClient) -> None:
+    bad_login = client.post(
+        "/api/auth/login",
+        json={"phone": "+79990000099", "password": "wrong-password"},
+    )
+    assert bad_login.status_code == 401
+
+    profile = client.get("/api/auth/me")
+    assert profile.status_code == 200
+    assert profile.json()["role"] == "client"
+
+
+def test_protected_endpoint_rejects_anonymous() -> None:
+    with TestClient(app) as anonymous:
+        response = anonymous.get("/api/tickets")
+        assert response.status_code == 401

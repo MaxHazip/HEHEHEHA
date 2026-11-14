@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 TicketSource = Literal["chat", "web", "phone"]
+
 TicketStatus = Literal["draft", "new", "in_progress", "resolved", "closed"]
 TicketPriority = Literal["low", "medium", "high", "critical"]
 MessageRole = Literal[
@@ -18,16 +19,25 @@ def normalize_role(role: str) -> str:
         return "assistant"
     return "user"
 
+TicketStatus = Literal["new", "in_progress", "closed", "rejected"]
+TicketPriority = Literal["low", "medium", "high", "critical", "needs_review"]
+MessageRole = Literal["client", "bot", "dispatcher", "engineer"]
+
+
 
 class UserRead(BaseModel):
     id: int
     name: str
     role: str
+
     email: str
     # Первая компетенция инженера — для обратной совместимости UI.
     specialty: str | None = None
     # id профиля Engineer (нужен для POST /api/tickets/{id}/assign).
     engineer_id: int | None = None
+
+    specialty: str | None = None
+
     phone: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -35,7 +45,11 @@ class UserRead(BaseModel):
 
 class AttachmentRead(BaseModel):
     id: int
+
     ticket_id: int | None = None
+
+    ticket_id: int
+
     message_id: int | None = None
     kind: str
     filename: str
@@ -49,7 +63,11 @@ class AttachmentRead(BaseModel):
 
 class MessageRead(BaseModel):
     id: int
+
     ticket_id: int | None = None
+
+    ticket_id: int
+
     role: str
     text: str
     created_at: datetime
@@ -77,12 +95,17 @@ class TicketCreate(BaseModel):
     title: str | None = None
     description: str = ""
     source: TicketSource = "chat"
+
     priority: TicketPriority | None = None
+
+    priority: TicketPriority = "medium"
+
     client_name: str | None = None
     client_phone: str | None = None
 
 
 class TicketUpdate(BaseModel):
+
     status: TicketStatus | None = None
     priority: TicketPriority | None = None
     category_id: int | None = None
@@ -103,6 +126,25 @@ class TicketAssign(BaseModel):
 
 class MessageCreate(BaseModel):
     role: MessageRole = "user"
+
+    title: str | None = None
+    description: str | None = None
+    status: TicketStatus | None = None
+    priority: TicketPriority | None = None
+    category_code: str | None = None
+    subcategory_code: str | None = None
+    assignee_id: int | None = None
+    ai_description: str | None = None
+    ai_solution: str | None = None
+
+
+class TicketAssign(BaseModel):
+    assignee_id: int
+
+
+class MessageCreate(BaseModel):
+    role: MessageRole = "client"
+
     text: str = Field(default="", max_length=20_000)
     attachment_ids: list[int] = Field(default_factory=list)
 

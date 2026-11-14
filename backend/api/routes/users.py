@@ -7,11 +7,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.serializers import user_read
+
 from backend.core.database import get_session
 from backend.models import Engineer, User
 from backend.schemas.ticket_schemas import UserRead
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+from backend.api.dependencies import require_roles
+from backend.core.database import get_session
+from backend.models import User
+from backend.schemas.ticket_schemas import UserRead
+
+router = APIRouter(prefix="/api/users", tags=["users"], dependencies=[Depends(require_roles("admin", "dispatcher"))])
+
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
@@ -26,6 +35,7 @@ async def list_users(
     stmt = stmt.order_by(User.id)
 
     users = (await session.scalars(stmt)).all()
+
 
     result: list[UserRead] = []
     for user in users:
@@ -43,3 +53,6 @@ async def list_users(
         if read is not None:
             result.append(read)
     return result
+
+    return [user_read(user) for user in users if user_read(user) is not None]
+
