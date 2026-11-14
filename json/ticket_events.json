@@ -1,0 +1,21 @@
+[
+  {"id": 1,  "ticket_id": 1, "actor_id": null, "action": "ticket_created",      "field": null,          "old_value": null,               "new_value": {"status": "draft"},                     "created_at": "2025-10-01T10:12:00Z"},
+  {"id": 2,  "ticket_id": 1, "actor_id": 1,    "action": "ticket_confirmed",    "field": null,          "old_value": null,               "new_value": {"status": "new"},                       "created_at": "2025-10-01T10:15:00Z"},
+  {"id": 3,  "ticket_id": 1, "actor_id": 1,    "action": "engineer_assigned",   "field": "engineer_id", "old_value": null,               "new_value": 1,                                       "created_at": "2025-10-01T10:16:00Z"},
+  {"id": 4,  "ticket_id": 1, "actor_id": 1,    "action": "status_changed",      "field": "status",      "old_value": "new",              "new_value": "in_progress",                           "created_at": "2025-10-01T10:20:00Z"},
+  {"id": 5,  "ticket_id": 1, "actor_id": 3,    "action": "status_changed",      "field": "status",      "old_value": "in_progress",      "new_value": "resolved",                              "created_at": "2025-10-01T10:55:00Z"},
+  {"id": 6,  "ticket_id": 1, "actor_id": 1,    "action": "status_changed",      "field": "status",      "old_value": "resolved",         "new_value": "closed",                                "created_at": "2025-10-01T11:05:00Z"},
+
+  {"id": 7,  "ticket_id": 2, "actor_id": null, "action": "ticket_created",      "field": null,          "old_value": null,               "new_value": {"status": "draft", "is_mass_incident": true}, "created_at": "2025-10-02T08:40:00Z"},
+  {"id": 8,  "ticket_id": 2, "actor_id": 1,    "action": "ticket_updated",      "field": "priority",    "old_value": "high",             "new_value": "critical",                              "created_at": "2025-10-02T08:42:00Z"},
+  {"id": 9,  "ticket_id": 2, "actor_id": 1,    "action": "ticket_confirmed",    "field": null,          "old_value": null,               "new_value": {"status": "new"},                       "created_at": "2025-10-02T08:43:00Z"},
+
+  {"id": 10, "ticket_id": 4, "actor_id": 2,    "action": "engineer_reassigned", "field": "engineer_id", "old_value": 1,                  "new_value": 3,                                       "created_at": "2025-10-04T09:20:00Z"},
+
+  {"id": 11, "ticket_id": 5, "actor_id": 1,    "action": "ticket_updated",      "field": "category_id", "old_value": null,               "new_value": 3,                                       "created_at": "2025-10-05T16:40:00Z"},
+
+  {"id": 12, "ticket_id": 6, "actor_id": null, "action": "ticket_created",      "field": null,          "old_value": null,               "new_value": {"status": "draft"},                     "created_at": "2025-10-07T10:10:00Z"},
+  {"id": 13, "ticket_id": 6, "actor_id": 1,    "action": "ticket_confirmed",    "field": null,          "old_value": null,               "new_value": {"status": "new"},                       "created_at": "2025-10-07T10:12:00Z"},
+  {"id": 14, "ticket_id": 6, "actor_id": 1,    "action": "engineer_assigned",   "field": "engineer_id", "old_value": null,               "new_value": 2,                                       "created_at": "2025-10-07T10:13:00Z"},
+  {"id": 15, "ticket_id": 6, "actor_id": 2,    "action": "status_changed",      "field": "status",      "old_value": "new",              "new_value": "in_progress",                           "created_at": "2025-10-07T10:15:00Z"}
+]

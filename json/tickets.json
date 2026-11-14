@@ -1,0 +1,74 @@
+[
+  {
+    "id": 1,
+    "chat_session_id": "11111111-1111-1111-1111-111111111101",
+    "created_by": 6, "raw_text": "Не работает интернет в каб. 210, IP 10.0.3.15, ошибка DNS",
+    "channel": "chat", "status": "closed",
+    "category_id": 1, "subcategory_id": 1, "priority": "medium",
+    "device": "PC-142", "building": "HQ", "floor": "2", "room": "210", "host": "10.0.3.15",
+    "symptoms": ["no_internet", "dns_error"], "attempted_actions": ["ipconfig /flushdns"],
+    "missing_fields": [], "is_mass_incident": false, "needs_human_review": false,
+    "recommended_engineer_id": 1, "engineer_id": 1, "confirmed_by": 1,
+    "created_at": "2025-10-01T10:12:00Z", "confirmed_at": "2025-10-01T10:15:00Z", "updated_at": "2025-10-01T11:05:00Z"
+  },
+  {
+    "id": 2,
+    "chat_session_id": "11111111-1111-1111-1111-111111111102",
+    "created_by": 7, "raw_text": "Весь 3 этаж без связи, 40 человек, срочно",
+    "channel": "phone", "status": "closed",
+    "category_id": 1, "subcategory_id": 2, "priority": "critical",
+    "device": null, "building": "HQ", "floor": "3", "room": null, "host": null,
+    "symptoms": ["mass_outage", "no_connectivity"], "attempted_actions": [],
+    "missing_fields": ["room", "host"], "is_mass_incident": true, "needs_human_review": true,
+    "recommended_engineer_id": 1, "engineer_id": 1, "confirmed_by": 1,
+    "created_at": "2025-10-02T08:40:00Z", "confirmed_at": "2025-10-02T08:43:00Z", "updated_at": "2025-10-02T09:20:00Z"
+  },
+  {
+    "id": 3,
+    "chat_session_id": "11111111-1111-1111-1111-111111111103",
+    "created_by": 6, "raw_text": "Принтер HP SN-44120 не печатает, офис 305",
+    "channel": "chat", "status": "closed",
+    "category_id": 2, "subcategory_id": 3, "priority": "low",
+    "device": "PRN-HP-3F", "building": "HQ", "floor": "3", "room": "305", "host": null,
+    "symptoms": ["printer_not_printing"], "attempted_actions": [],
+    "missing_fields": [], "is_mass_incident": false, "needs_human_review": false,
+    "recommended_engineer_id": 2, "engineer_id": 2, "confirmed_by": 2,
+    "created_at": "2025-10-03T14:05:00Z", "confirmed_at": "2025-10-03T14:08:00Z", "updated_at": "2025-10-03T15:00:00Z"
+  },
+  {
+    "id": 4,
+    "chat_session_id": "11111111-1111-1111-1111-111111111104",
+    "created_by": 7, "raw_text": "Нужен доступ к 1С, логин belova",
+    "channel": "chat", "status": "in_progress",
+    "category_id": 4, "subcategory_id": 7, "priority": "low",
+    "device": null, "building": "HQ", "floor": "3", "room": "312", "host": null,
+    "symptoms": ["no_access_1c"], "attempted_actions": [],
+    "missing_fields": [], "is_mass_incident": false, "needs_human_review": false,
+    "recommended_engineer_id": 3, "engineer_id": 3, "confirmed_by": 2,
+    "created_at": "2025-10-04T09:15:00Z", "confirmed_at": "2025-10-04T09:20:00Z", "updated_at": "2025-10-04T09:25:00Z"
+  },
+  {
+    "id": 5,
+    "chat_session_id": "11111111-1111-1111-1111-111111111105",
+    "created_by": 6, "raw_text": "Что-то не работает, помогите",
+    "channel": "chat", "status": "closed",
+    "category_id": null, "subcategory_id": null, "priority": "medium",
+    "device": null, "building": null, "floor": null, "room": null, "host": null,
+    "symptoms": [], "attempted_actions": [],
+    "missing_fields": ["category_id", "location", "symptoms"], "is_mass_incident": false, "needs_human_review": true,
+    "recommended_engineer_id": null, "engineer_id": null, "confirmed_by": 1,
+    "created_at": "2025-10-05T16:30:00Z", "confirmed_at": "2025-10-05T16:35:00Z", "updated_at": "2025-10-05T17:10:00Z"
+  },
+  {
+    "id": 6,
+    "chat_session_id": "11111111-1111-1111-1111-111111111107",
+    "created_by": 6, "raw_text": "Монитор на рабочем месте не включается, индикатор не горит, офис 210",
+    "channel": "chat", "status": "in_progress",
+    "category_id": 2, "subcategory_id": 5, "priority": "medium",
+    "device": "MON-210", "building": "HQ", "floor": "2", "room": "210", "host": null,
+    "symptoms": ["no_power_indicator", "no_display"], "attempted_actions": [],
+    "missing_fields": [], "is_mass_incident": false, "needs_human_review": false,
+    "recommended_engineer_id": 2, "engineer_id": 2, "confirmed_by": 1,
+    "created_at": "2025-10-07T10:10:00Z", "confirmed_at": "2025-10-07T10:12:00Z", "updated_at": "2025-10-07T10:15:00Z"
+  }
+]

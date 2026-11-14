@@ -1,0 +1,6 @@
+[
+  {"id": 1, "user_id": 3, "competencies": ["network", "vpn", "dns", "wi-fi"],                    "load": 0, "available": true},
+  {"id": 2, "user_id": 4, "competencies": ["hardware", "printer_failure", "computer_failure", "monitor_failure"], "load": 1, "available": true},
+  {"id": 3, "user_id": 5, "competencies": ["access", "account_access", "1c", "ad"],              "load": 1, "available": true},
+  {"id": 4, "user_id": 8, "competencies": ["software", "software_error"],                        "load": 0, "available": false}
+]

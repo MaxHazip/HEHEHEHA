@@ -1,0 +1,10 @@
+[
+  {"id": 1, "name": "Иванов Пётр Сергеевич",      "email": "p.ivanov@company.ru",    "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$FAKEHASH01", "role": "dispatcher", "is_active": true,  "created_at": "2025-01-10T09:00:00Z"},
+  {"id": 2, "name": "Смирнова Анна Викторовна",   "email": "a.smirnova@company.ru",  "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$FAKEHASH02", "role": "dispatcher", "is_active": true,  "created_at": "2025-02-03T09:00:00Z"},
+  {"id": 3, "name": "Кузнецов Дмитрий Олегович",  "email": "d.kuznetsov@company.ru", "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$FAKEHASH03", "role": "engineer",   "is_active": true,  "created_at": "2024-11-01T09:00:00Z"},
+  {"id": 4, "name": "Соколова Елена Андреевна",   "email": "e.sokolova@company.ru",  "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$FAKEHASH04", "role": "engineer",   "is_active": true,  "created_at": "2024-10-05T09:00:00Z"},
+  {"id": 5, "name": "Морозов Игорь Павлович",     "email": "i.morozov@company.ru",   "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$FAKEHASH05", "role": "engineer",   "is_active": true,  "created_at": "2025-01-22T09:00:00Z"},
+  {"id": 6, "name": "Никитин Владимир Андреевич", "email": "v.nikitin@company.ru",   "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$FAKEHASH06", "role": "requester",  "is_active": true,  "created_at": "2025-03-01T09:00:00Z"},
+  {"id": 7, "name": "Белова Ольга Дмитриевна",    "email": "o.belova@company.ru",    "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$FAKEHASH07", "role": "requester",  "is_active": true,  "created_at": "2025-03-01T09:00:00Z"},
+  {"id": 8, "name": "Фёдорова Мария Игоревна",    "email": "m.fedorova@company.ru",  "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$FAKEHASH08", "role": "engineer",   "is_active": false, "created_at": "2024-12-15T09:00:00Z"}
+]
