@@ -1,0 +1,17 @@
+[project]
+name = "hakaton"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Максим",email = "robergorlfed@gmail.com"}
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi (>=0.162.7,<0.163.0)",
+    "uvicorn (>=0.54.0,<0.55.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
