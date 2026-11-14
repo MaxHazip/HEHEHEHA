@@ -1,3 +1,4 @@
+
 from backend.models.user_models import User
 from backend.models.engineer_models import Engineer
 
@@ -14,3 +15,22 @@ from backend.models.ticket_event import TicketEvent
 from backend.models.knowledge_article_models import KnowledgeArticle
 from backend.models.ticket_kb_article_models import TicketKBArticle
 from backend.models.ticket_attachment import TicketAttachment
+
+from backend.models.ticket_models import (
+    AIAnalysisRecord,
+    Call,
+    CallTranscriptSegment,
+    Ticket,
+    TicketAttachment,
+    TicketMessage,
+)
+
+__all__ = [
+    "AIAnalysisRecord",
+    "Call",
+    "CallTranscriptSegment",
+    "Ticket",
+    "TicketAttachment",
+    "TicketMessage",
+    "User",
+]

@@ -7,6 +7,7 @@ import TicketsPage from '@/pages/TicketsPage'
 import ClientChatPage from '@/pages/ClientChatPage'
 import EngineerPage from '@/pages/EngineerPage'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
+import DispatcherCallsPage from '@/pages/DispatcherCallsPage'
 
 export default function AppRouter() {
   const role = useAuthStore((s) => s.role)
@@ -30,6 +31,7 @@ export default function AppRouter() {
           <>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/tickets" element={<TicketsPage />} />
+            <Route path="/calls" element={<DispatcherCallsPage />} />
           </>
         )}
 

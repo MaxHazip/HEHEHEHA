@@ -7,11 +7,11 @@ services:
       POSTGRES_PASSWORD: ef6a998e815ad6513ffe2f4a749208f3e269f24b43384d03f9acb2f5cb343169
       POSTGRES_DB: dispatcher_db
     ports:
-      - "5432:5432" 
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data 
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U student -d course_db"]
+      test: ["CMD-SHELL", "pg_isready -U dispatcher_user -d dispatcher_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -20,30 +20,66 @@ services:
   test_db:
     image: postgres:15-alpine
     container_name: test_course_db
-
     restart: unless-stopped
-
     environment:
       POSTGRES_DB: test_tasks_db
       POSTGRES_USER: testuser
-      POSTGRES_PASSWORD: testpassword 
-
+      POSTGRES_PASSWORD: testpassword
     ports:
-     - "5433:5432"
+      - "5433:5432"
 
   web:
-    build: . 
+    build: .
     restart: always
     ports:
       - "8000:8000"
     environment:
-      
-      DATABASE_URL: postgresql+asyncpg://tasks_user:taskssecret@db:5432/tasks_db
+      DATABASE_URL: postgresql+asyncpg://dispatcher_user:ef6a998e815ad6513ffe2f4a749208f3e269f24b43384d03f9acb2f5cb343169@db:5432/dispatcher_db
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,https://localhost:5173
+      AI_PROVIDER: ${AI_PROVIDER:-auto}
+      AI_AUTO_ANALYZE: ${AI_AUTO_ANALYZE:-true}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b-instruct}
+      SPEECH_PROVIDER: ${SPEECH_PROVIDER:-auto}
+      WHISPER_BASE_URL: ${WHISPER_BASE_URL:-}
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-auto}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ru}
+      SIP_WEBHOOK_TOKEN: ${SIP_WEBHOOK_TOKEN:-}
+      SIP_AUTO_ANALYZE: ${SIP_AUTO_ANALYZE:-true}
     depends_on:
       db:
         condition: service_healthy
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000
 
-    command: sh -c "sleep 3 && uvicorn backend.main:app --host 0.0.0.0 --port 8000"
+  # Локальная текстовая модель. Запуск: docker compose --profile ollama up -d
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  # Локальный Whisper с OpenAI-совместимым API.
+  # Запуск: docker compose --profile whisper up -d
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    profiles: ["whisper"]
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      WHISPER__MODEL: ${WHISPER_HTTP_MODEL:-Systran/faster-whisper-small}
+      WHISPER__LANGUAGE: ${WHISPER_LANGUAGE:-ru}
+    volumes:
+      - whisper_cache:/root/.cache/huggingface
 
 volumes:
   postgres_data:
+  ollama_data:
+  whisper_cache:
