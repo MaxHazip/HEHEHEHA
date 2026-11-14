@@ -1,0 +1,9 @@
+[
+  {"id": 1, "category_id": 1, "code": "no_internet",       "name": "Нет интернета"},
+  {"id": 2, "category_id": 1, "code": "connection_error",  "name": "Ошибка подключения"},
+  {"id": 3, "category_id": 2, "code": "printer_failure",   "name": "Не работает принтер"},
+  {"id": 4, "category_id": 2, "code": "computer_failure",  "name": "Не работает компьютер"},
+  {"id": 5, "category_id": 2, "code": "monitor_failure",   "name": "Не работает монитор"},
+  {"id": 6, "category_id": 3, "code": "software_error",    "name": "Ошибка ПО"},
+  {"id": 7, "category_id": 4, "code": "account_access",    "name": "Проблема с доступом"}
+]

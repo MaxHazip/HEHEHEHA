@@ -1,0 +1,36 @@
+[
+  {"id": 1, "chat_session_id": "11111111-1111-1111-1111-111111111101", "ticket_id": 1, "version": 1, "model_name": "gpt-4o-mini",
+   "result": {"category": "network", "subcategory": "no_internet", "location": {"building": "HQ", "floor": "2", "room": "210"},
+              "symptoms": ["no_internet", "dns_error"], "missing_fields": [], "suggested_priority": "medium", "clarification_questions": []},
+   "confidence": 0.94, "created_at": "2025-10-01T10:11:30Z"},
+
+  {"id": 2, "chat_session_id": "11111111-1111-1111-1111-111111111102", "ticket_id": 2, "version": 1, "model_name": "gpt-4o-mini",
+   "result": {"category": "network", "subcategory": "connection_error", "location": {"building": "HQ", "floor": "3"},
+              "symptoms": ["mass_outage", "no_connectivity"], "missing_fields": ["room", "host"], "suggested_priority": "critical", "clarification_questions": []},
+   "confidence": 0.88, "created_at": "2025-10-02T08:39:00Z"},
+
+  {"id": 3, "chat_session_id": "11111111-1111-1111-1111-111111111103", "ticket_id": 3, "version": 1, "model_name": "gpt-4o-mini",
+   "result": {"category": "hardware", "subcategory": "printer_failure", "location": {"building": "HQ", "floor": "3", "room": "305"},
+              "symptoms": ["printer_not_printing"], "missing_fields": [], "suggested_priority": "low", "clarification_questions": []},
+   "confidence": 0.90, "created_at": "2025-10-03T14:04:30Z"},
+
+  {"id": 4, "chat_session_id": "11111111-1111-1111-1111-111111111104", "ticket_id": 4, "version": 1, "model_name": "gpt-4o-mini",
+   "result": {"category": "access", "subcategory": "account_access", "location": {"building": "HQ", "floor": "3", "room": "312"},
+              "symptoms": ["no_access_1c"], "missing_fields": [], "suggested_priority": "low", "clarification_questions": []},
+   "confidence": 0.92, "created_at": "2025-10-04T09:14:00Z"},
+
+  {"id": 5, "chat_session_id": "11111111-1111-1111-1111-111111111105", "ticket_id": 5, "version": 1, "model_name": "gpt-4o-mini",
+   "result": {"category": null, "subcategory": null, "location": {}, "symptoms": [], "missing_fields": ["category_id", "location", "symptoms"],
+              "suggested_priority": "medium", "clarification_questions": ["Что именно не работает?", "Где вы находитесь?"]},
+   "confidence": 0.35, "created_at": "2025-10-05T16:29:00Z"},
+
+  {"id": 6, "chat_session_id": "11111111-1111-1111-1111-111111111105", "ticket_id": 5, "version": 2, "model_name": "gpt-4o-mini",
+   "result": {"category": "software", "subcategory": "software_error", "location": {}, "symptoms": ["email_client_error"],
+              "missing_fields": [], "suggested_priority": "medium", "clarification_questions": []},
+   "confidence": 0.61, "created_at": "2025-10-05T16:40:00Z"},
+
+  {"id": 7, "chat_session_id": "11111111-1111-1111-1111-111111111107", "ticket_id": 6, "version": 1, "model_name": "gpt-4o-mini",
+   "result": {"category": "hardware", "subcategory": "monitor_failure", "location": {"building": "HQ", "floor": "2", "room": "210"},
+              "symptoms": ["no_power_indicator", "no_display"], "missing_fields": [], "suggested_priority": "medium", "clarification_questions": []},
+   "confidence": 0.87, "created_at": "2025-10-07T10:05:00Z"}
+]

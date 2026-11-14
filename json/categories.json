@@ -1,0 +1,6 @@
+[
+  {"id": 1, "code": "network",  "name": "Сеть"},
+  {"id": 2, "code": "hardware", "name": "Оборудование"},
+  {"id": 3, "code": "software", "name": "Программное обеспечение"},
+  {"id": 4, "code": "access",   "name": "Доступы"}
+]
