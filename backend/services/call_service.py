@@ -5,9 +5,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_module.core.schemas import TicketAIResult
 from backend.api.serializers import call_detail
+
 from backend.models import Call, CallTranscriptSegment, ChatMessage, ChatSession, Ticket
 from backend.schemas.call_schemas import CallDetail, TranscriptSegmentRead
 from backend.services.accounts import get_or_create_requester
+
+from backend.models import Call, CallTranscriptSegment, Ticket
+from backend.schemas.call_schemas import (
+    CallDetail,
+    TranscriptSegmentRead,
+)
+
 from backend.services.ai_service import analyze_ticket
 
 
@@ -65,6 +73,7 @@ async def ensure_ticket_for_call(
         if ticket is not None:
             return ticket
 
+
     requester = await get_or_create_requester(session)
 
     text = (
@@ -90,6 +99,16 @@ async def ensure_ticket_for_call(
         raw_text=text,
         channel="voice",
         status="new",
+    )
+    session.add(ticket)
+    await session.flush()
+
+
+    ticket = Ticket(
+        title="Обращение по телефону",
+        description=call.transcript_text or "Входящий звонок",
+        source="phone",
+        client_phone=call.client_phone,
     )
     session.add(ticket)
     await session.flush()
