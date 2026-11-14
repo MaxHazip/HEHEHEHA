@@ -108,11 +108,7 @@ async def describe_image(
             detail=(
 
                 "Vision-модель не настроена. Задайте VISION_PROVIDER=ollama "
-                "и OLLAMA_VISION_MODEL (например, qwen3-vl:8b) или ключ Gemini."
-
-                "Vision-модель не настроена: задайте GOOGLE_API_KEY "
-                "и включите Gemini API"
-
+                "и OLLAMA_VISION_MODEL (например, qwen3-vl:2b) или ключ Gemini."
             ),
         )
 

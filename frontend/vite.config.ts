@@ -16,6 +16,9 @@ export default defineConfig({
         target: backendTarget,
         changeOrigin: true,
         ws: true,
+        // Локальные ИИ-модели на CPU могут отвечать минутами.
+        timeout: 600_000,
+        proxyTimeout: 600_000,
       },
     },
   },

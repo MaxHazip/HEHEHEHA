@@ -7,7 +7,10 @@ const API_URL =
 
 export const api = axios.create({
   baseURL: API_URL,
-  timeout: 30_000,
+  // Обычные запросы: 5 минут (загрузка аудио/файлов тоже сюда).
+  // Долгие ИИ-запросы переопределяют таймаут на 10 минут
+  // (см. chatApi.ts / callsApi.ts).
+  timeout: 300_000,
 })
 
 export function apiUrl(path: string | null | undefined): string | undefined {

@@ -1,25 +1,86 @@
 import { useState } from 'react'
 import type { Ticket } from '@/types/ticket.types'
-import { UserCircle2, Wrench, AlertCircle, CheckCircle2, Pencil, X, Check } from 'lucide-react'
-import { useApproveTicket, useAssignEngineer, useEngineers, useUpdateAiDescription } from '../hooks/useTickets'
+import {
+  UserCircle2,
+  Wrench,
+  AlertCircle,
+  CheckCircle2,
+  Pencil,
+  X,
+  Check,
+  Clock3,
+  Sparkles,
+  FileText,
+  ArrowUpRight,
+  Loader2,
+  UserRound,
+} from 'lucide-react'
 
-export default function TicketCard({ ticket }: { ticket: Ticket }) {
+import {
+  useApproveTicket,
+  useAssignEngineer,
+  useEngineers,
+  useUpdateAiDescription,
+} from '../hooks/useTickets'
+
+interface Props {
+  ticket: Ticket
+}
+
+const statusLabels: Record<Ticket['status'], string> = {
+  new: 'Ожидает обработки',
+  in_progress: 'В работе',
+  closed: 'Завершена',
+}
+
+const formatDate = (date: string) => {
+  const parsed = new Date(date)
+
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Дата неизвестна'
+  }
+
+  return parsed.toLocaleDateString('ru-RU', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+export default function TicketCard({ ticket }: Props) {
   const [isEditingEngineer, setIsEditingEngineer] = useState(false)
   const [isEditingDesc, setIsEditingDesc] = useState(false)
-  
-  // Состояние для текста ИИ
   const [descValue, setDescValue] = useState(ticket.aiDescription)
 
   const { data: engineers = [] } = useEngineers()
-  const { mutate: assignEngineer } = useAssignEngineer()
-  const { mutate: approveTicket, isPending: isApproving } = useApproveTicket()
-  const { mutate: updateDesc, isPending: isUpdatingDesc } = useUpdateAiDescription()
+
+  const {
+    mutate: assignEngineer,
+    isPending: isAssigning,
+  } = useAssignEngineer()
+
+  const {
+    mutate: approveTicket,
+    isPending: isApproving,
+  } = useApproveTicket()
+
+  const {
+    mutate: updateDesc,
+    isPending: isUpdatingDesc,
+  } = useUpdateAiDescription()
 
   const handleSaveDesc = () => {
-    if (!descValue.trim()) return // Валидация: не сохраняем пустоту
-    updateDesc({ ticketId: ticket.id, description: descValue.trim() }, {
-      onSuccess: () => setIsEditingDesc(false)
-    })
+    if (!descValue.trim()) return
+
+    updateDesc(
+      {
+        ticketId: ticket.id,
+        description: descValue.trim(),
+      },
+      {
+        onSuccess: () => setIsEditingDesc(false),
+      }
+    )
   }
 
   const handleCancelDesc = () => {
@@ -27,122 +88,312 @@ export default function TicketCard({ ticket }: { ticket: Ticket }) {
     setIsEditingDesc(false)
   }
 
+  const handleAssign = (engineerId: string) => {
+    const engineer = engineers.find(
+      (item) => item.id === Number(engineerId)
+    )
+
+    if (!engineer) return
+
+    assignEngineer(
+      {
+        ticketId: ticket.id,
+        engineer,
+      },
+      {
+        onSuccess: () => setIsEditingEngineer(false),
+      }
+    )
+  }
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col gap-4">
-      <div className="flex justify-between items-start">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-md font-medium">
+    <article className="glass-card group overflow-hidden p-5 transition duration-200 hover:-translate-y-1 hover:shadow-[0_15px_40px_rgba(0,0,0,0.055)] sm:p-6">
+
+      {/* Верхняя панель */}
+
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-gray-100 px-3 py-1 text-[10px] font-semibold text-gray-500">
+              #{ticket.id}
+            </span>
+
+            <span className="text-[11px] text-gray-400">
               {ticket.category}
             </span>
-            <span className="text-slate-400 text-sm">#{ticket.id}</span>
-            {ticket.priority === 'high' && (
-              <span className="flex items-center gap-1 text-rose-600 text-xs font-medium">
-                <AlertCircle size={14} /> Высокий
-              </span>
-            )}
           </div>
-          <h3 className="text-lg font-semibold text-slate-800">{ticket.title}</h3>
+
+          <h3 className="text-lg font-semibold leading-snug tracking-tight text-[#222]">
+            {ticket.title}
+          </h3>
         </div>
-        <span className={`text-xs px-2 py-1 rounded ${ticket.status === 'new' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
-          {ticket.status === 'new' ? 'Ожидает проверки' : 'В работе'}
+
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-[#333] transition group-hover:bg-[#242424] group-hover:text-white">
+          {ticket.status === 'closed' ? (
+            <CheckCircle2 size={18} />
+          ) : ticket.status === 'in_progress' ? (
+            <Wrench size={18} />
+          ) : (
+            <InboxIcon />
+          )}
+        </div>
+      </div>
+
+      {/* Статусы */}
+
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <span
+          className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-semibold ${
+            ticket.status === 'new'
+              ? 'bg-gray-100 text-gray-700'
+              : ticket.status === 'in_progress'
+                ? 'bg-[#242424] text-white'
+                : 'border border-gray-200 bg-white text-gray-500'
+          }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              ticket.status === 'in_progress'
+                ? 'bg-white'
+                : 'bg-current'
+            }`}
+          />
+
+          {statusLabels[ticket.status]}
+        </span>
+
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-semibold ${
+            ticket.priority === 'high'
+              ? 'bg-[#ededed] text-[#222]'
+              : 'bg-white text-gray-400 border border-gray-100'
+          }`}
+        >
+          {ticket.priority === 'high' && (
+            <AlertCircle size={12} />
+          )}
+
+          {ticket.priority === 'high'
+            ? 'Высокий приоритет'
+            : ticket.priority === 'medium'
+              ? 'Средний приоритет'
+              : 'Низкий приоритет'}
         </span>
       </div>
 
-      {/* Блок Анализа ИИ (теперь редактируемый) */}
-      <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-        <div className="flex justify-between items-center mb-1">
-          <div className="text-xs text-slate-400 flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-purple-500"></span> Анализ ИИ
+      {/* Анализ ИИ */}
+
+      <div className="mt-5 rounded-2xl bg-[#f5f5f3] p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
+              <Sparkles size={14} />
+            </div>
+
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+              Анализ ИИ
+            </span>
           </div>
+
           {ticket.status === 'new' && !isEditingDesc && (
-            <button 
-              onClick={() => setIsEditingDesc(true)} 
-              className="text-slate-400 hover:text-blue-600 transition"
-              title="Редактировать текст"
+            <button
+              type="button"
+              onClick={() => setIsEditingDesc(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-400 transition hover:bg-[#242424] hover:text-white"
+              title="Редактировать анализ"
             >
-              <Pencil size={14} />
+              <Pencil size={13} />
             </button>
           )}
         </div>
 
         {isEditingDesc ? (
-          <div className="mt-2">
+          <div>
             <textarea
-              className="w-full border border-slate-300 rounded-md p-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 min-h-[80px]"
               value={descValue}
-              onChange={(e) => setDescValue(e.target.value)}
-              placeholder="Опишите суть проблемы..."
+              onChange={(event) => setDescValue(event.target.value)}
               autoFocus
+              rows={4}
+              className="w-full resize-y rounded-xl border border-gray-200 bg-white p-3 text-sm leading-6 text-[#333] outline-none transition focus:border-gray-500"
             />
-            <div className="flex justify-end gap-2 mt-2">
-              <button 
+
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
                 onClick={handleCancelDesc}
-                className="px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded transition flex items-center gap-1"
+                disabled={isUpdatingDesc}
+                className="button-light"
               >
-                <X size={14} /> Отмена
+                <X size={14} />
+                Отмена
               </button>
-              <button 
+
+              <button
+                type="button"
                 onClick={handleSaveDesc}
                 disabled={!descValue.trim() || isUpdatingDesc}
-                className="px-3 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 rounded transition disabled:opacity-50 flex items-center gap-1"
+                className="button-dark disabled:opacity-50"
               >
-                <Check size={14} /> {isUpdatingDesc ? 'Сохранение...' : 'Сохранить'}
+                {isUpdatingDesc ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Check size={14} />
+                )}
+
+                Сохранить
               </button>
             </div>
           </div>
         ) : (
-          <p className="text-sm text-slate-600 mt-1">{ticket.aiDescription}</p>
+          <p className="whitespace-pre-wrap text-sm leading-6 text-gray-600">
+            {ticket.aiDescription || 'Описание отсутствует.'}
+          </p>
         )}
       </div>
 
-      <div className="flex items-center justify-between mt-2 pt-4 border-t border-slate-100">
-        <div className="text-sm text-slate-500 flex items-center gap-2">
-          <Wrench size={16} /> Исполнитель:
+      {/* Дополнительные документы */}
+
+      {ticket.documents && ticket.documents.length > 0 && (
+        <div className="mt-5">
+          <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+            <FileText size={14} />
+            Прикреплённые документы
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {ticket.documents.map((document, index) => (
+              <div
+                key={`${document}-${index}`}
+                className="flex max-w-full items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2 text-xs text-gray-500"
+              >
+                <FileText size={13} className="shrink-0" />
+
+                <span className="truncate">
+                  {document}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Исполнитель */}
+
+      <div className="mt-5 border-t border-gray-100 pt-5">
+        <div className="mb-3 text-[10px] font-semibold uppercase tracking-[1.5px] text-gray-400">
+          Ответственный исполнитель
         </div>
 
         {isEditingEngineer ? (
-          <select
-            className="border border-slate-300 rounded-md p-2 text-sm outline-none focus:border-blue-500"
-            value={ticket.assignee?.id || ''}
-            onChange={(e) => {
-              const eng = engineers.find((x) => x.id === Number(e.target.value))
-              if (eng) assignEngineer({ ticketId: ticket.id, engineer: eng })
-              setIsEditingEngineer(false)
-            }}
-            onBlur={() => setIsEditingEngineer(false)}
-            autoFocus
-          >
-            {engineers.map((eng) => (
-              <option key={eng.id} value={eng.id}>
-                {eng.name} ({eng.specialty})
+          <div className="space-y-3">
+            <select
+              value={ticket.assignee?.id || ''}
+              onChange={(event) => handleAssign(event.target.value)}
+              disabled={isAssigning}
+              className="glass-input"
+            >
+              <option value="" disabled>
+                Выберите инженера
               </option>
-            ))}
-          </select>
+
+              {engineers.map((engineer) => (
+                <option key={engineer.id} value={engineer.id}>
+                  {engineer.name} — {engineer.specialty}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={() => setIsEditingEngineer(false)}
+              disabled={isAssigning}
+              className="text-xs text-gray-400 hover:text-black"
+            >
+              Отмена
+            </button>
+          </div>
         ) : (
           <button
+            type="button"
             onClick={() => setIsEditingEngineer(true)}
-            disabled={ticket.status !== 'new'}
-            className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={ticket.status !== 'new' || isAssigning}
+            className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 text-left transition hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <UserCircle2 size={18} className="text-blue-600" />
-            <div className="text-left">
-              <div className="text-sm font-medium text-slate-800">{ticket.assignee?.name || 'Не назначен'}</div>
-              <div className="text-xs text-slate-500">{ticket.assignee?.specialty}</div>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100">
+              {ticket.assignee ? (
+                <UserCircle2 size={20} />
+              ) : (
+                <UserRound size={20} className="text-gray-400" />
+              )}
             </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-[#222]">
+                {ticket.assignee?.name || 'Не назначен'}
+              </div>
+
+              <div className="mt-1 text-[11px] text-gray-400">
+                {ticket.assignee?.specialty || 'Исполнитель не выбран'}
+              </div>
+            </div>
+
+            {isAssigning ? (
+              <Loader2 size={15} className="animate-spin text-gray-400" />
+            ) : (
+              <ArrowUpRight size={16} className="text-gray-300" />
+            )}
           </button>
         )}
       </div>
 
-      {ticket.status === 'new' && (
-        <button
-          onClick={() => approveTicket(ticket.id)}
-          disabled={isApproving || isEditingDesc || !descValue.trim()}
-          className="w-full mt-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2"
-        >
-          <CheckCircle2 size={16} /> {isApproving ? 'Отправка...' : 'Утвердить и отправить'}
-        </button>
-      )}
-    </div>
+      {/* Нижняя панель */}
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
+        <div className="flex items-center gap-2 text-[10px] text-gray-400">
+          <Clock3 size={13} />
+          {formatDate(ticket.createdAt)}
+        </div>
+
+        {ticket.status === 'new' && (
+          <button
+            type="button"
+            onClick={() => approveTicket(ticket.id)}
+            disabled={
+              isApproving ||
+              isEditingDesc ||
+              isEditingEngineer ||
+              !descValue.trim()
+            }
+            className="button-dark disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isApproving ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <CheckCircle2 size={14} />
+            )}
+
+            {isApproving ? 'Отправка...' : 'Утвердить заявку'}
+          </button>
+        )}
+
+        {ticket.status === 'in_progress' && (
+          <span className="flex items-center gap-2 text-[10px] font-medium text-gray-500">
+            <Wrench size={13} />
+            Передана инженеру
+          </span>
+        )}
+
+        {ticket.status === 'closed' && (
+          <span className="flex items-center gap-2 text-[10px] font-medium text-gray-500">
+            <CheckCircle2 size={13} />
+            Работа завершена
+          </span>
+        )}
+      </div>
+    </article>
   )
+}
+
+function InboxIcon() {
+  return <FileText size={18} />
 }

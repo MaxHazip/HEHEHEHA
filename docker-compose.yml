@@ -38,16 +38,21 @@ services:
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,https://localhost:5173
       AI_PROVIDER: ${AI_PROVIDER:-auto}
       AI_AUTO_ANALYZE: ${AI_AUTO_ANALYZE:-true}
-      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-60}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-300}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:8b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
       OLLAMA_THINK: ${OLLAMA_THINK:-false}
-      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-8192}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-4096}
+      OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-768}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-2m}
       # Vision: Qwen3-VL через Ollama
       VISION_PROVIDER: ${VISION_PROVIDER:-auto}
-      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-qwen3-vl:8b}
+      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-qwen3-vl:2b}
+      OLLAMA_VISION_NUM_CTX: ${OLLAMA_VISION_NUM_CTX:-4096}
+      OLLAMA_VISION_NUM_PREDICT: ${OLLAMA_VISION_NUM_PREDICT:-256}
+      VISION_TIMEOUT_SECONDS: ${VISION_TIMEOUT_SECONDS:-240}
       # Речь: T-one и Silero TTS обычно запускаются на хосте.
       SPEECH_PROVIDER: ${SPEECH_PROVIDER:-auto}
       TONE_BASE_URL: ${TONE_BASE_URL:-http://host.docker.internal:8002}
@@ -76,6 +81,8 @@ services:
       ARI_RECORD: ${ARI_RECORD:-true}
       ARI_GREETING_MEDIA: ${ARI_GREETING_MEDIA:-}
       ARI_AUTO_ANALYZE: ${ARI_AUTO_ANALYZE:-true}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
     depends_on:
       db:
         condition: service_healthy
@@ -90,8 +97,23 @@ services:
     restart: unless-stopped
     ports:
       - "11434:11434"
+    environment:
+      # Не держим несколько моделей разом на 16 ГБ.
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_KEEP_ALIVE: "2m"
     volumes:
       - ollama_data:/root/.ollama
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant_vector_db
+    ports:
+      - "6333:6333"  # REST API
+      - "6334:6334"  # gRPC порт
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
 
   # Локальный Whisper с OpenAI-совместимым API.
   # Запуск: docker compose --profile whisper up -d
@@ -111,3 +133,5 @@ volumes:
   postgres_data:
   ollama_data:
   whisper_cache:
+  qdrant_storage:
+    driver: local

@@ -1,5 +1,8 @@
 import { api, apiUrl } from '@/lib/api'
 
+// Распознавание/анализ на CPU может занимать минуты.
+const AI_TIMEOUT_MS = 600_000
+
 export interface CallListItem {
   id: number
   ticket_id: number | null
@@ -140,6 +143,8 @@ async function saveTranscript(
 export async function transcribeCall(callId: number): Promise<CallDetail> {
   const { data } = await api.post<CallDetail>(
     `/api/calls/${callId}/transcribe`,
+    undefined,
+    { timeout: AI_TIMEOUT_MS },
   )
   return data
 }
@@ -147,6 +152,8 @@ export async function transcribeCall(callId: number): Promise<CallDetail> {
 async function analyzeCall(callId: number): Promise<AnalysisResult> {
   const { data } = await api.post<AnalysisResult>(
     `/api/calls/${callId}/analyze`,
+    undefined,
+    { timeout: AI_TIMEOUT_MS },
   )
   return data
 }

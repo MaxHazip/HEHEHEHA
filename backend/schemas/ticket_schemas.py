@@ -102,6 +102,9 @@ class TicketCreate(BaseModel):
 
     client_name: str | None = None
     client_phone: str | None = None
+    # None — решает AI_AUTO_ANALYZE; false — не анализировать при
+    # создании (клиент вызовет /analyze сам, с файлами и сообщением).
+    auto_analyze: bool | None = None
 
 
 class TicketUpdate(BaseModel):

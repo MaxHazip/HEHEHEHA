@@ -1,10 +1,16 @@
 import { api } from '@/lib/api'
 
+// ИИ на CPU может отвечать несколько минут — не обрываем запрос через 30 с.
+const AI_TIMEOUT_MS = 600_000
+
 export interface CreateTicketPayload {
   description: string
   source: 'chat' | 'web' | 'phone'
   client_name?: string
   client_phone?: string
+  // false — не запускать ИИ-анализ при создании: клиент вызовет
+  // /api/tickets/{id}/analyze сам, уже с сообщением и вложениями.
+  auto_analyze?: boolean
 }
 
 export interface TicketResponse {
@@ -58,7 +64,11 @@ export interface AnalysisResponse {
 export async function createTicket(
   payload: CreateTicketPayload,
 ): Promise<TicketResponse> {
-  const { data } = await api.post<TicketResponse>('/api/tickets', payload)
+  const { data } = await api.post<TicketResponse>(
+    '/api/tickets',
+    payload,
+    { timeout: AI_TIMEOUT_MS },
+  )
   return data
 }
 
@@ -93,6 +103,7 @@ export async function analyzeTicket(
   const { data } = await api.post<AnalysisResponse>(
     `/api/tickets/${ticketId}/analyze`,
     { force: true },
+    { timeout: AI_TIMEOUT_MS },
   )
   return data
 }

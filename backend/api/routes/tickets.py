@@ -209,34 +209,12 @@ async def create_ticket(
     await session.commit()
     await session.refresh(ticket)
 
-    if settings.AI_AUTO_ANALYZE:
-
-    title = (payload.title or payload.description.strip()[:60]).strip()
-    ticket = Ticket(
-        title=title[:255] or "Новое обращение",
-        description=payload.description.strip(),
-        source=payload.source,
-        priority=payload.priority,
-        client_name=payload.client_name,
-        client_phone=payload.client_phone,
+    should_analyze = (
+        payload.auto_analyze
+        if payload.auto_analyze is not None
+        else settings.AI_AUTO_ANALYZE
     )
-    session.add(ticket)
-    await session.flush()
-
-    if payload.description.strip():
-        session.add(
-            TicketMessage(
-                ticket_id=ticket.id,
-                role="client",
-                text=payload.description.strip(),
-            )
-        )
-
-    await session.commit()
-    await session.refresh(ticket)
-
-    if settings.AI_AUTO_ANALYZE and payload.description.strip():
-
+    if should_analyze:
         try:
             await analyze_ticket(session, ticket, force=True)
         except Exception:  # noqa: BLE001
