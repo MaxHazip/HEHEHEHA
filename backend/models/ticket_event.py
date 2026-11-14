@@ -47,7 +47,7 @@ class TicketEvent(Base):
 
     actor_id: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )

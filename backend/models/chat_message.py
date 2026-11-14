@@ -22,6 +22,7 @@ from backend.core.database import Base
 
 if TYPE_CHECKING:
     from backend.models.chat_session import ChatSession
+    from backend.models.ticket_attachment import TicketAttachment
 
 
 class ChatMessageRoles(str, enum.Enum):
@@ -75,4 +76,9 @@ class ChatMessage(Base):
     session: Mapped["ChatSession"] = relationship(
         "ChatSession",
         back_populates="messages",
+    )
+
+    attachments: Mapped[list["TicketAttachment"]] = relationship(
+        "TicketAttachment",
+        back_populates="message",
     )

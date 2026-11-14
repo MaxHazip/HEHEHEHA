@@ -10,3 +10,7 @@ from backend.models.ticket import Ticket
 
 from backend.models.ticket_analysis import TicketAnalysis
 from backend.models.ticket_event import TicketEvent
+
+from backend.models.knowledge_article_models import KnowledgeArticle
+from backend.models.ticket_kb_article_models import TicketKBArticle
+from backend.models.ticket_attachment import TicketAttachment

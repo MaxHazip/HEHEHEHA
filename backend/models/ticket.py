@@ -29,6 +29,8 @@ if TYPE_CHECKING:
     from backend.models.user_models import User
     from backend.models.ticket_analysis import TicketAnalysis
     from backend.models.ticket_event import TicketEvent
+    from backend.models.ticket_kb_article_models import TicketKBArticle
+    from backend.models.ticket_attachment import TicketAttachment
 
 
 class TicketStatuses(str, enum.Enum):
@@ -214,4 +216,12 @@ class Ticket(Base):
         order_by="TicketEvent.created_at",
     )
 
-    
+    kb_recommendations: Mapped[list["TicketKBArticle"]] = relationship(
+        "TicketKBArticle",
+        back_populates="ticket",
+    )
+
+    attachments: Mapped[list["TicketAttachment"]] = relationship(
+        "TicketAttachment",
+        back_populates="ticket",
+    )
