@@ -87,7 +87,7 @@ async def describe_image(
             status_code=503,
             detail=(
                 "Vision-модель не настроена. Задайте VISION_PROVIDER=ollama "
-                "и OLLAMA_VISION_MODEL (например, qwen3-vl:8b) или ключ Gemini."
+                "и OLLAMA_VISION_MODEL (например, qwen3-vl:2b) или ключ Gemini."
             ),
         )
 

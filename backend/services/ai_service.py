@@ -105,11 +105,17 @@ async def build_analysis_request(
         )
     ).all()
 
+    last_key: tuple[str, str] | None = None
     for row in rows:
-        if not row.content.strip():
+        text = row.content.strip()
+        if not text:
             continue
         role = "client" if row.role == "user" else "bot"
-        messages.append(AIMessage(role=role, text=row.content))
+        key = (role, text)
+        if key == last_key:
+            continue
+        last_key = key
+        messages.append(AIMessage(role=role, text=text))
 
     if not messages and ticket.raw_text.strip():
         messages.append(AIMessage(role="client", text=ticket.raw_text))

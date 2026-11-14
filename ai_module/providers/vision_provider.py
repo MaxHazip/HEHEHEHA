@@ -53,7 +53,18 @@ async def _describe_ollama(
         ],
         "stream": False,
         "think": False,
-        "options": {"temperature": 0.1},
+        "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "2m"),
+        "options": {
+            "temperature": 0.1,
+            # Изображения расходуют контекст быстрее текста;
+            # 4096 достаточно для описания скриншота.
+            "num_ctx": int(
+                os.getenv("OLLAMA_VISION_NUM_CTX", "4096")
+            ),
+            "num_predict": int(
+                os.getenv("OLLAMA_VISION_NUM_PREDICT", "256")
+            ),
+        },
     }
 
     async with httpx.AsyncClient(timeout=timeout) as client:
@@ -124,7 +135,9 @@ async def describe_image(data: bytes, mime_type: str) -> str | None:
     for provider in attempts:
         try:
             if provider == "ollama":
-                model = os.getenv("OLLAMA_VISION_MODEL", "qwen3-vl:8b")
+                model = os.getenv(
+                    "OLLAMA_VISION_MODEL", "qwen3-vl:2b"
+                )
                 result = await _describe_ollama(
                     data, mime_type, model, timeout
                 )

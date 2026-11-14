@@ -115,7 +115,7 @@ class OllamaTextProvider:
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
-        model: str = "qwen3:8b",
+        model: str = "qwen3:4b",
         timeout: float = 120.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
@@ -136,11 +136,11 @@ class OllamaTextProvider:
             "format": "json",
             # Для Qwen3 отключаем «размышления», чтобы получить чистый JSON.
             "think": _env_flag("OLLAMA_THINK", False),
-            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "5m"),
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "2m"),
             "options": {
                 "temperature": 0.2,
-                "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),
-                "num_predict": int(os.getenv("OLLAMA_NUM_PREDICT", "1024")),
+                "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "4096")),
+                "num_predict": int(os.getenv("OLLAMA_NUM_PREDICT", "768")),
             },
         }
 
@@ -238,7 +238,7 @@ def build_text_provider(provider: str | None = None) -> TextProvider:
     if mode == "ollama":
         return OllamaTextProvider(
             base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-            model=os.getenv("OLLAMA_MODEL", "qwen3:8b"),
+            model=os.getenv("OLLAMA_MODEL", "qwen3:4b"),
             timeout=max(timeout, 60.0),
         )
 
@@ -277,6 +277,6 @@ def build_text_provider(provider: str | None = None) -> TextProvider:
     # auto: локальная модель приоритетнее облака.
     return OllamaTextProvider(
         base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-        model=os.getenv("OLLAMA_MODEL", "qwen3:8b"),
+        model=os.getenv("OLLAMA_MODEL", "qwen3:4b"),
         timeout=max(timeout, 60.0),
     )

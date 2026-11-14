@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     AI_PROVIDER: str = "auto"
     AI_AUTO_ANALYZE: bool = True
-    AI_TIMEOUT_SECONDS: float = 60.0
+    AI_TIMEOUT_SECONDS: float = 180.0
 
     # Google Gemini (облачный резерв, если локальная модель не нужна).
     GOOGLE_API_KEY: str | None = None
@@ -47,12 +47,13 @@ class Settings(BaseSettings):
     GOOGLE_STT_LANGUAGE: str = "ru-RU"
 
     # Ollama: локальные Qwen3 / Qwen3-VL.
+    # Профиль для 16 ГБ ОЗУ без дискретной видеокарты — 4B + 2B.
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "qwen3:8b"
+    OLLAMA_MODEL: str = "qwen3:4b"
     OLLAMA_THINK: bool = False
-    OLLAMA_NUM_CTX: int = 8192
-    OLLAMA_NUM_PREDICT: int = 1024
-    OLLAMA_KEEP_ALIVE: str = "5m"
+    OLLAMA_NUM_CTX: int = 4096
+    OLLAMA_NUM_PREDICT: int = 768
+    OLLAMA_KEEP_ALIVE: str = "2m"
 
     # Любой локальный OpenAI-совместимый сервер (LM Studio, vLLM, ...).
     OPENAI_BASE_URL: str | None = None
@@ -105,9 +106,11 @@ class Settings(BaseSettings):
     # auto | ollama | gemini | none
     # ------------------------------------------------------------------
     VISION_PROVIDER: str = "auto"
-    OLLAMA_VISION_MODEL: str = "qwen3-vl:8b"
+    OLLAMA_VISION_MODEL: str = "qwen3-vl:2b"
+    OLLAMA_VISION_NUM_CTX: int = 4096
+    OLLAMA_VISION_NUM_PREDICT: int = 256
     GEMINI_VISION_MODEL: str | None = None
-    VISION_TIMEOUT_SECONDS: float = 120.0
+    VISION_TIMEOUT_SECONDS: float = 240.0
 
     # SIP-шлюз (Asterisk/FreeSWITCH/облачная АТС) присылает события сюда.
     SIP_WEBHOOK_TOKEN: str | None = None
@@ -169,6 +172,8 @@ class Settings(BaseSettings):
         "SILERO_TIMEOUT_SECONDS",
         "VISION_PROVIDER",
         "OLLAMA_VISION_MODEL",
+        "OLLAMA_VISION_NUM_CTX",
+        "OLLAMA_VISION_NUM_PREDICT",
         "GEMINI_VISION_MODEL",
         "VISION_TIMEOUT_SECONDS",
         "SIP_WEBHOOK_TOKEN",

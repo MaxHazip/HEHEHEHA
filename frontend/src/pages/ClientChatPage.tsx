@@ -80,6 +80,9 @@ export default function ClientChatPage() {
         source,
         client_name: user?.name,
         client_phone: user?.phone,
+        // Анализ запустим явно после сообщения и файла, иначе
+        // LLM на CPU отработает дважды.
+        auto_analyze: false,
       })
       setTicketId(ticket.id)
       return ticket.id

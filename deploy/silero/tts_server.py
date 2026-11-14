@@ -1,8 +1,8 @@
 """Локальный HTTP-сервер Silero TTS.
 
 Запуск:
-    pip install -r requirements.txt
-    uvicorn tts_server:app --host 0.0.0.0 --port 8003
+    pip install fastapi "uvicorn[standard]" torch soundfile numpy
+    TORCH_NUM_THREADS=2 uvicorn tts_server:app --host 0.0.0.0 --port 8003
 
 Эндпоинт:
     POST /tts  {"text": "...", "speaker": "aidar", "sample_rate": 48000}
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 
 import torch  # type: ignore[import-not-found]
 from fastapi import FastAPI, HTTPException
@@ -25,6 +26,9 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Silero TTS", version="1.0.0")
+
+# Не даём Silero забрать все ядра у Ollama/T-one на CPU-машине.
+torch.set_num_threads(int(os.getenv("TORCH_NUM_THREADS", "2")))
 
 _model = None
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
