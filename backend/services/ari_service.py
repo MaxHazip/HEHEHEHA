@@ -544,6 +544,8 @@ class AriRunner:
             "connected": self.connected,
             "app": settings.ARI_APP,
             "url": settings.ARI_URL,
+            "username": settings.ARI_USERNAME,
+            "password_set": bool(settings.ARI_PASSWORD),
             "recording": settings.ARI_RECORD,
             "last_error": self.last_error,
             "last_event_at": (

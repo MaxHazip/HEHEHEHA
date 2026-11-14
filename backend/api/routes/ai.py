@@ -15,11 +15,13 @@ from ai_module.core.taxonomy import (
 from backend.core.database import get_session
 from backend.models import Ticket
 from backend.schemas.ai_schemas import AnalyzeTextRequest
-from backend.services.ai_service import analyze_free_text
+from backend.services.ai_service import (
+    analysis_result,
+    analyze_free_text,
+    latest_analysis,
+)
 
-from backend.api.dependencies import get_current_user
-
-router = APIRouter(prefix="/api/ai", tags=["ai"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/api/ai", tags=["ai"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
@@ -54,8 +56,11 @@ async def read_ticket_analysis(
     ticket = await session.get(Ticket, ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
-    if not ticket.ai_analysis:
+
+    analysis = await latest_analysis(session, ticket)
+    result = analysis_result(analysis)
+    if result is None:
         raise HTTPException(
             status_code=404, detail="Анализ для заявки ещё не выполнялся"
         )
-    return ticket.ai_analysis
+    return result.model_dump(mode="json")

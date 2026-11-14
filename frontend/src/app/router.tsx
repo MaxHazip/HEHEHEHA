@@ -7,8 +7,6 @@ import TicketsPage from '@/pages/TicketsPage'
 import ClientChatPage from '@/pages/ClientChatPage'
 import EngineerPage from '@/pages/EngineerPage'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
-// Добавили импорты новых страниц
-import EngineersPage from '@/pages/EngineersPage'
 import DispatcherCallsPage from '@/pages/DispatcherCallsPage'
 
 export default function AppRouter() {
@@ -33,9 +31,7 @@ export default function AppRouter() {
           <>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/tickets" element={<TicketsPage />} />
-            {/* Добавили маршруты для Звонков и Исполнителей */}
             <Route path="/calls" element={<DispatcherCallsPage />} />
-            <Route path="/employees" element={<EngineersPage />} />
           </>
         )}
 
