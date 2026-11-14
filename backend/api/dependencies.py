@@ -2,7 +2,6 @@
 
 from collections.abc import Callable
 from typing import Annotated
-ax``
 import jwt
 from fastapi import Depends, HTTPException, status, WebSocketException
 from starlette.requests import HTTPConnection

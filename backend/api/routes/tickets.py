@@ -38,7 +38,7 @@ from backend.models import (
     TicketAttachment,
 )
 
-    call_summary,
+   ( call_summary,
     message_read,
     ticket_detail,
     ticket_summary,
