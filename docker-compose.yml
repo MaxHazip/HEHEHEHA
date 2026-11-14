@@ -35,6 +35,8 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://dispatcher_user:ef6a998e815ad6513ffe2f4a749208f3e269f24b43384d03f9acb2f5cb343169@db:5432/dispatcher_db
+      # В контейнере миграции используют тот же адрес db, что и приложение.
+      ALEMBIC_DATABASE_URL: ""
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,https://localhost:5173
       SESSION_SECRET: ${SESSION_SECRET:-}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
