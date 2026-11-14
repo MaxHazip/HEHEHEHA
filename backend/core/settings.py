@@ -61,6 +61,20 @@ class Settings(BaseSettings):
     SIP_WEBHOOK_TOKEN: str | None = None
     SIP_AUTO_ANALYZE: bool = True
 
+    # ARI (Asterisk REST Interface): backend сам слушает события АТС.
+    ARI_ENABLED: bool = False
+    ARI_URL: str = "http://localhost:8088"
+    ARI_WS_URL: str | None = None
+    ARI_USERNAME: str = "dispatchai"
+    ARI_PASSWORD: str | None = None
+    ARI_APP: str = "dispatchai"
+    ARI_RECORD: bool = True
+    ARI_GREETING_MEDIA: str | None = None
+    ARI_AUTO_ANALYZE: bool = True
+    ARI_RECORDING_FORMAT: str = "wav"
+    ARI_RECONNECT_SECONDS: float = 5.0
+    ARI_VERIFY_SSL: bool = True
+
     _RUNTIME_ENV_KEYS: ClassVar[tuple[str, ...]] = (
         "AI_PROVIDER",
         "AI_TIMEOUT_SECONDS",

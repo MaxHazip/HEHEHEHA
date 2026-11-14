@@ -150,6 +150,10 @@ class Call(Base):
     recording_mime: Mapped[str | None] = mapped_column(String(128), default=None)
     recording_size: Mapped[int | None] = mapped_column(Integer, default=None)
     recording_data: Mapped[bytes | None] = mapped_column(LargeBinary, default=None)
+    # Имя записи в ARI (stored recording) для скачивания из Asterisk.
+    recording_name: Mapped[str | None] = mapped_column(
+        String(128), default=None, index=True
+    )
 
     # Текстовая расшифровка звонка.
     transcript_text: Mapped[str | None] = mapped_column(Text, default=None)

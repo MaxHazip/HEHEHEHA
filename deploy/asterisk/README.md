@@ -1,96 +1,137 @@
 # Подключение Asterisk к DispatchAI
 
-Backend принимает записи звонков и метаданные через SIP-webhook.
-Сам Asterisk в репозиторий не входит: используется уже установленная АТС
-или облачная телефония.
+Есть два режима:
 
-## 1. Настройте backend
+1. **ARI (рекомендуется)** — backend сам подключается к Asterisk по
+   WebSocket, отвечает на звонок, включает запись, забирает её и создаёт
+   заявку. Dialplan — только `Stasis(dispatchai)`.
+2. **Webhook + dialplan curl** — Asterisk сам отправляет запись в backend.
+   Подходит, если ARI включить нельзя. См. конец документа.
 
-В `backend/.env` (или в окружении Docker):
+Сам Asterisk в репозиторий не входит: используется установленная АТС,
+Docker-контейнер или облачная телефония.
 
-```env
-SIP_WEBHOOK_TOKEN=длинный-случайный-токен
-SIP_AUTO_ANALYZE=true
-SPEECH_PROVIDER=auto
-WHISPER_BASE_URL=http://whisper:8000/v1   # если поднят профиль whisper
+## Режим ARI
+
+### 1. Скопируйте конфиги
+
+```bash
+sudo cp ari.conf http.conf /etc/asterisk/
+sudo cp dialplan-ari.conf /etc/asterisk/
 ```
 
-Перезапустите backend. Проверка:
+В `/etc/asterisk/extensions.conf`:
+
+```ini
+#include "dialplan-ari.conf"
+```
+
+### 2. Задайте пароль
+
+`/etc/asterisk/ari.conf`:
+
+```ini
+[dispatchai]
+type = user
+read_only = no
+password = change-me
+password_format = plain
+```
+
+`backend/.env`:
+
+```env
+ARI_ENABLED=true
+ARI_URL=http://asterisk:8088
+ARI_USERNAME=dispatchai
+ARI_PASSWORD=change-me
+ARI_APP=dispatchai
+ARI_RECORD=true
+ARI_AUTO_ANALYZE=true
+```
+
+- `ARI_URL` — адрес Asterisk из backend. Если backend в Docker Compose,
+  а Asterisk на хосте, используйте `http://host.docker.internal:8088`.
+- `ARI_APP` должен совпадать с именем в `Stasis(...)` и в `ari.conf`.
+
+### 3. Перезагрузите Asterisk
+
+```bash
+asterisk -rx "module reload res_http_websocket.so"
+asterisk -rx "module reload res_ari.so"
+asterisk -rx "dialplan reload"
+```
+
+Проверка ARI:
+
+```bash
+curl -u dispatchai:change-me http://localhost:8088/ari/asterisk/info
+```
+
+### 4. Перезапустите backend
+
+```bash
+uvicorn backend.main:app --reload --port 8000
+```
+
+Проверка:
 
 ```bash
 curl -s http://localhost:8000/api/health
 ```
 
-В ответе должно быть:
+Блок:
 
 ```json
-"telephony": { "sip_webhook_enabled": true }
+"ari": {
+  "enabled": true,
+  "running": true,
+  "connected": true,
+  "app": "dispatchai"
+}
 ```
 
-## 2. Подключите dialplan
+### 5. Как проходит звонок
 
-Скопируйте `dialplan-snippet.conf` в `/etc/asterisk/` и добавьте в
-`extensions.conf`:
+1. Входящий звонок попадает в `[from-trunk]` и уходит в `Stasis(dispatchai)`.
+2. ARI присылает `StasisStart`.
+3. Backend создаёт `Call(transport=sip, provider=asterisk-ari)`,
+   отвечает на канал и запускает запись.
+4. При завершении приходит `RecordingFinished`.
+5. Backend скачивает WAV через
+   `GET /ari/recordings/stored/{name}/file`.
+6. Запись сохраняется в `calls.recording_data`, расшифровывается
+   Whisper/Google STT и анализируется ИИ.
+7. Создаётся заявка `source=phone`; диспетчер видит звонок в `/calls`.
 
-```ini
-#include "dialplan-snippet.conf"
+Live-субтитры доступны для браузерных WebRTC-звонков. Для SIP/ARI
+расшифровка появляется после завершения звонка (запись → STT).
+
+### Опции
+
+```env
+ARI_GREETING_MEDIA=sound:hello-world   # приветствие после ответа
+ARI_RECORD=false                       # только события, без записи
+ARI_AUTO_ANALYZE=false                 # не создавать заявку автоматически
 ```
 
-Либо вставьте содержимое вручную. Обязательно замените:
+### Диагностика
 
-- `BACKEND_URL` — адрес backend, доступный из Asterisk
-  (в Docker Compose это `http://web:8000`);
-- `TELEPHONY_TOKEN` — тот же токен, что `SIP_WEBHOOK_TOKEN`.
+- **401/403 от ARI** — пароль в `ari.conf` и `ARI_PASSWORD` не совпадают.
+- **`connected: false`** — проверьте `ARI_URL`, порт 8088 и firewall.
+- **Нет `StasisStart`** — dialplan не уходит в `Stasis(dispatchai)` или
+  имя приложения не совпадает с `ARI_APP`.
+- **Нет записи** — `ARI_RECORD=false` или ARI-пользователь с
+  `read_only=yes`.
+- **Запись не скачалась** — в логах backend будет `ARI: не удалось
+  скачать запись ...`; проверьте, что файл stored recording существует.
 
-Перезагрузите:
+## Режим webhook (альтернатива)
 
-```bash
-asterisk -rx "dialplan reload"
-```
+Если ARI недоступен, используйте `dialplan-snippet.conf`: `MixMonitor`
+пишет файл, а `curl` на `h`-extension отправляет его в
+`/api/telephony/sip/recording`. Подробности — в этом же каталоге и
+`docs/telephony.md`.
 
-## 3. Проверьте запись
-
-Dialplan использует `MixMonitor` и сохраняет WAV в
-`/var/spool/asterisk/monitor/`. После звонка на `h`-extension выполняется:
-
-```bash
-curl -X POST "$BACKEND_URL/api/telephony/sip/recording" \
-  -H "X-Telephony-Token: $TELEPHONY_TOKEN" \
-  -F "external_id=$UNIQUEID" \
-  -F "from_number=$CALLERID(num)" \
-  -F "file=@$REC"
-```
-
-Backend:
-
-1. создаёт звонок `transport=sip`, `external_id=<UNIQUEID>`;
-2. сохраняет запись в `calls.recording_data`;
-3. расшифровывает её локальным Whisper/Google STT;
-4. запускает ИИ-анализ и создаёт заявку `source=phone`;
-5. отправляет live-события диспетчеру.
-
-## 4. События начала и завершения (опционально)
-
-Если АТС умеет вызывать webhook, можно отправлять:
-
-```bash
-curl -X POST "$BACKEND_URL/api/telephony/sip/calls" \
-  -H "X-Telephony-Token: $TELEPHONY_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"external_id":"1712345678.42","from_number":"+79990000000","direction":"inbound"}'
-
-curl -X POST "$BACKEND_URL/api/telephony/sip/calls/1712345678.42/ended" \
-  -H "X-Telephony-Token: $TELEPHONY_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"status":"completed","duration_seconds":95,"recording_url":"http://pbx.local/records/1712345678.42.wav","recording_mime":"audio/wav"}'
-```
-
-`recording_url` должен быть доступен backend по http(s).
-
-## 5. Безопасность
-
-- Не публикуйте `/api/telephony/*` в интернет без токена и HTTPS.
-- Токен передаётся в `X-Telephony-Token`; при утечке смените его.
-- `recording_url` скачивается backend'ом — разрешайте только доверенные
-  хосты АТС.
-- Для больших объёмов записей используйте S3/MinIO вместо BLOB в БД.
+Не включайте одновременно ARI и webhook для одного звонка: получите две
+записи и два звонка в БД.

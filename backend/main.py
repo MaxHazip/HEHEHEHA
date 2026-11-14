@@ -17,6 +17,7 @@ from backend.api.routes import (
 )
 from backend.core.database import create_session_maker, init_db
 from backend.core.settings import settings
+from backend.services.ari_service import ari_runner
 from backend.services.seed import seed_demo_data
 
 logging.basicConfig(
@@ -31,13 +32,19 @@ async def lifespan(_app: FastAPI):
     await init_db()
     async with create_session_maker() as session:
         await seed_demo_data(session)
+
+    ari_runner.start()
+
     logger.info(
-        "Backend готов: DB=%s, AI_PROVIDER=%s, Gemini=%s",
+        "Backend готов: DB=%s, AI_PROVIDER=%s, Gemini=%s, ARI=%s",
         settings.DATABASE_URL.split("://")[0],
         settings.AI_PROVIDER,
         "да" if settings.google_api_key else "нет",
+        "вкл" if settings.ARI_ENABLED else "выкл",
     )
     yield
+
+    await ari_runner.stop()
 
 
 app = FastAPI(
@@ -80,5 +87,6 @@ async def health() -> dict:
         "speech": speech_status(),
         "telephony": {
             "sip_webhook_enabled": bool(settings.SIP_WEBHOOK_TOKEN),
+            "ari": ari_runner.status(),
         },
     }
