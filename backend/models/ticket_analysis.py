@@ -52,7 +52,6 @@ class TicketAnalysis(Base):
         uuid_pk(),
         ForeignKey("chat_sessions.id", ondelete="RESTRICT"),
         nullable=False,
-        index=True,
     )
 
     ticket_id: Mapped[int | None] = mapped_column(
