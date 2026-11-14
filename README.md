@@ -16,6 +16,9 @@
   `faster-whisper`) и Google Cloud Speech-to-Text как fallback.
 - **SIP-шлюз**: webhook-эндпоинты для Asterisk/FreeSWITCH/облачной АТС,
   загрузка записи, авто-расшифровка и создание заявки.
+- **ARI**: backend сам слушает события Asterisk, отвечает на звонок,
+  запускает запись через ARI REST, скачивает её и создаёт заявку — без
+  `curl` в dialplan.
 - **Панель диспетчера `/calls`**: список звонков, плеер, расшифровка,
   таймкоды и live-субтитры активных звонков.
 - **ИИ-анализ**: контракт `TicketAIResult` — категория, локация, симптомы,
@@ -171,6 +174,14 @@ OPENAI_MODEL=qwen2.5-7b-instruct
 | `WHISPER_LANGUAGE` | `ru` | Язык распознавания |
 | `SIP_WEBHOOK_TOKEN` | — | Токен SIP-webhook'ов |
 | `SIP_AUTO_ANALYZE` | `true` | Анализировать записи из АТС |
+| `ARI_ENABLED` | `false` | Включить ARI-клиент |
+| `ARI_URL` | `http://localhost:8088` | ARI REST Asterisk |
+| `ARI_USERNAME` | `dispatchai` | Пользователь ARI |
+| `ARI_PASSWORD` | — | Пароль ARI |
+| `ARI_APP` | `dispatchai` | Имя Stasis-приложения |
+| `ARI_RECORD` | `true` | Записывать ARI-звонки |
+| `ARI_GREETING_MEDIA` | — | Приветствие, напр. `sound:hello-world` |
+| `ARI_AUTO_ANALYZE` | `true` | Анализировать ARI-записи |
 | `MAX_UPLOAD_MB` | `30` | Лимит вложений |
 | `MAX_AUDIO_MB` | `60` | Лимит записи звонка |
 
@@ -199,6 +210,7 @@ OPENAI_MODEL=qwen2.5-7b-instruct
 | `POST` | `/api/telephony/sip/calls/{id}/ended` | SIP: звонок завершён |
 | `POST` | `/api/telephony/sip/recording` | SIP: загрузить запись |
 | `GET` | `/api/telephony/sip/calls/{id}` | SIP: состояние звонка |
+| `WS` | `ws://asterisk:8088/ari/events` | ARI: события Asterisk (исходящее подключение backend) |
 | `GET` | `/api/ai/taxonomy` | Справочники кодов |
 | `POST` | `/api/ai/analyze-text` | Анализ текста без заявки |
 | `GET` | `/api/health` | Состояние, речь, SIP |
@@ -214,7 +226,8 @@ python -m pytest ai_module/tests backend/tests -q
 
 Покрыто: контракт ИИ, отсутствие галлюцинаций, массовая авария,
 overrides диспетчера, полный цикл заявка → фото → звонок → расшифровка →
-анализ, Range-аудио, SIP-webhook, live-субтитры через WebSocket,
+анализ, Range-аудио, SIP-webhook, ARI-поток (StasisStart →
+RecordingFinished → StasisEnd), live-субтитры через WebSocket,
 выбор локальных провайдеров.
 
 Frontend:
@@ -233,7 +246,7 @@ backend/
   core/            # settings, database, мини-миграции
   models/          # tickets, messages, attachments, calls
   schemas/
-  services/        # ai_service, call_service, transcription, signalling
+  services/        # ai_service, call_service, transcription, ari_service, signalling
   tests/
 ai_module/
   core/            # taxonomy, schemas, analyzer, clarification, validator
@@ -254,7 +267,8 @@ docs/
 - Нет авторизации: роли выбираются на frontend, API открыт.
 - Файлы и аудио лежат в БД: удобно для демо, для продакшена — S3/MinIO.
 - SIP-стек/PBX не входит в репозиторий — нужен Asterisk/FreeSWITCH или
-  облачная АТС; backend принимает события и записи.
+  облачная АТС; backend принимает события и записи. ARI-режим требует
+  включённого `res_ari` и настроенного `ari.conf`.
 - In-memory сигналинг не переживает перезапуск и не масштабируется;
   для продакшена — Redis pub/sub и TURN/SFU.
 - Web Speech API зависит от Chrome/Edge и доступа к Google; для

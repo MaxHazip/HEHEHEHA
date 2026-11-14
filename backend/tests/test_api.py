@@ -12,6 +12,7 @@ os.environ["SEED_DEMO_DATA"] = "false"
 os.environ["AI_PROVIDER"] = "rule"
 os.environ["SPEECH_PROVIDER"] = "none"
 os.environ["SIP_WEBHOOK_TOKEN"] = "test-telephony-token"
+os.environ["ARI_ENABLED"] = "false"
 os.environ.pop("GOOGLE_API_KEY", None)
 os.environ.pop("GEMINI_API_KEY", None)
 

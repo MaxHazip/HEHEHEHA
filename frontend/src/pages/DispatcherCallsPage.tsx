@@ -94,12 +94,19 @@ export default function DispatcherCallsPage() {
 
   const selectedCallId = selectedCall?.id
   const selectedCallStatus = selectedCall?.status
+  const selectedCallTransport = selectedCall?.transport
 
   useEffect(() => {
     socketRef.current?.close()
     socketRef.current = null
 
-    if (!selectedCallId || selectedCallStatus !== 'active') return
+    if (
+      !selectedCallId ||
+      selectedCallStatus !== 'active' ||
+      selectedCallTransport !== 'webrtc'
+    ) {
+      return
+    }
 
     try {
       const socket = new WebSocket(
@@ -140,10 +147,11 @@ export default function DispatcherCallsPage() {
     } catch {
       return
     }
-  }, [selectedCallId, selectedCallStatus])
+  }, [selectedCallId, selectedCallStatus, selectedCallTransport])
 
   const isLive =
     liveStatus === 'active' || selectedCallStatus === 'active'
+  const supportsLiveCaptions = selectedCallTransport === 'webrtc'
   const liveTranscript = isLive
     ? liveText || selectedCall?.transcript_text || ''
     : selectedCall?.transcript_text || ''
@@ -305,7 +313,7 @@ export default function DispatcherCallsPage() {
                 </div>
               )}
 
-              {isLive && (
+              {isLive && supportsLiveCaptions && (
                 <div className="rounded-lg border border-rose-200 bg-rose-50 p-3">
                   <div className="text-xs text-rose-600 flex items-center gap-1 mb-1">
                     <Radio size={14} /> Live-субтитры
@@ -313,6 +321,13 @@ export default function DispatcherCallsPage() {
                   <p className="text-sm text-slate-700 whitespace-pre-wrap min-h-[48px]">
                     {liveText || 'Ожидание речи…'}
                   </p>
+                </div>
+              )}
+
+              {isLive && !supportsLiveCaptions && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                  Идёт SIP-звонок — он записывается. Расшифровка и запись
+                  появятся после завершения звонка.
                 </div>
               )}
 

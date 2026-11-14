@@ -103,6 +103,51 @@ curl -X POST http://localhost:8000/api/telephony/sip/recording \
 
 ## Asterisk
 
+### ARI: автоматические события без curl
+
+В ARI-режиме backend сам подключается к `ws://<asterisk>:8088/ari/events`
+и управляет звонком:
+
+1. `StasisStart` → создаёт звонок, отвечает и запускает запись.
+2. `RecordingFinished` → скачивает WAV, сохраняет в БД, расшифровывает
+   и запускает ИИ-анализ.
+3. `StasisEnd` / `ChannelDestroyed` → фиксирует завершение и длительность.
+
+Конфиги:
+
+- `deploy/asterisk/ari.conf`;
+- `deploy/asterisk/http.conf`;
+- `deploy/asterisk/dialplan-ari.conf` (только `Stasis(dispatchai)`).
+
+В `backend/.env`:
+
+```env
+ARI_ENABLED=true
+ARI_URL=http://asterisk:8088
+ARI_USERNAME=dispatchai
+ARI_PASSWORD=change-me
+ARI_APP=dispatchai
+ARI_RECORD=true
+ARI_AUTO_ANALYZE=true
+```
+
+Health показывает состояние подключения:
+
+```json
+"ari": {
+  "enabled": true,
+  "running": true,
+  "connected": true,
+  "app": "dispatchai"
+}
+```
+
+ARI-звонки видны диспетчеру в `/calls`; live-субтитры доступны для
+браузерных WebRTC-звонков, а SIP/ARI-запись расшифровывается после
+завершения. Подробная инструкция — `deploy/asterisk/README.md`.
+
+## Asterisk (webhook-режим)
+
 Готовый пример dialplan: `deploy/asterisk/dialplan-snippet.conf`.
 Кратко:
 
@@ -125,8 +170,13 @@ curl -X POST http://localhost:8000/api/telephony/sip/recording \
 ## Ограничения
 
 - Backend не заменяет PBX: нужен Asterisk/FreeSWITCH/облачная АТС.
+- ARI-режим требует включённых `res_ari`/`res_http_websocket` и
+  настроенного `ari.conf`; пароль должен совпадать с `ARI_PASSWORD`.
 - In-memory сигналинг не масштабируется горизонтально; для продакшена —
   Redis pub/sub и TURN/SFU.
+- Live-субтитры в реальном времени есть только у WebRTC-звонков (браузер
+  присылает текст по WebSocket). Запись SIP/ARI расшифровывается после
+  завершения звонка.
 - Запись в БД удобна для демо; для больших объёмов — S3/MinIO.
 - Загрузка записи по `recording_url` — доверенный webhook, защищённый
   токеном. Не открывайте эндпоинты без токена в интернет.

@@ -50,9 +50,19 @@ services:
       WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ru}
       SIP_WEBHOOK_TOKEN: ${SIP_WEBHOOK_TOKEN:-}
       SIP_AUTO_ANALYZE: ${SIP_AUTO_ANALYZE:-true}
+      ARI_ENABLED: ${ARI_ENABLED:-false}
+      ARI_URL: ${ARI_URL:-http://asterisk:8088}
+      ARI_USERNAME: ${ARI_USERNAME:-dispatchai}
+      ARI_PASSWORD: ${ARI_PASSWORD:-}
+      ARI_APP: ${ARI_APP:-dispatchai}
+      ARI_RECORD: ${ARI_RECORD:-true}
+      ARI_GREETING_MEDIA: ${ARI_GREETING_MEDIA:-}
+      ARI_AUTO_ANALYZE: ${ARI_AUTO_ANALYZE:-true}
     depends_on:
       db:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: uvicorn backend.main:app --host 0.0.0.0 --port 8000
 
   # Локальная текстовая модель. Запуск: docker compose --profile ollama up -d

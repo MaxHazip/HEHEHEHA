@@ -63,11 +63,21 @@ def _apply_light_migrations(sync_connection) -> None:
         sync_connection.execute(
             text("ALTER TABLE calls ADD COLUMN external_id VARCHAR(128)")
         )
+    if "recording_name" not in columns:
+        sync_connection.execute(
+            text("ALTER TABLE calls ADD COLUMN recording_name VARCHAR(128)")
+        )
 
     sync_connection.execute(
         text(
             "CREATE INDEX IF NOT EXISTS ix_calls_external_id "
             "ON calls (external_id)"
+        )
+    )
+    sync_connection.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_calls_recording_name "
+            "ON calls (recording_name)"
         )
     )
 
