@@ -314,6 +314,10 @@ BUILDING_WORD_RE = re.compile(
     r"(перв|втор|трет|четверт|пят|шест|седьм|восьм|девят|десят)\w*\s+корпус",
     re.IGNORECASE,
 )
+BUILDING_NAME_RE = re.compile(
+    r"(?:здани[ея]|строени[ея])\s*[№#:]?\s*([^,.;\n]{1,60})",
+    re.IGNORECASE,
+)
 FLOOR_RE = re.compile(
     r"(?:этаж\w*\s*[№#]?\s*([0-9]{1,2}))|([0-9]{1,2})\s*(?:-?\s*"
     r"(?:й|ий|ой|ом|ем|м))?\s*этаж",
@@ -391,6 +395,12 @@ def _extract_building(text: str) -> str | None:
     match = BUILDING_WORD_RE.search(text)
     if match:
         return RU_NUMBERS.get(match.group(1).lower())
+
+    match = BUILDING_NAME_RE.search(text)
+    if match:
+        name = match.group(1).strip(" ,.;")
+        if name:
+            return name[:100]
     return None
 
 

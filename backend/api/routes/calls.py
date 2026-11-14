@@ -55,10 +55,6 @@ from backend.services.transcription import (
 
 router = APIRouter(prefix="/api/calls", tags=["calls"])
 
-from backend.api.dependencies import get_current_user
-
-router = APIRouter(prefix="/api/calls", tags=["calls"], dependencies=[Depends(get_current_user)])
-
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 AUDIO_EXTENSIONS = (".webm", ".ogg", ".oga", ".wav", ".mp3", ".m4a", ".mp4")
@@ -294,11 +290,7 @@ async def save_transcript(
 @router.post(
     "/{call_id}/transcribe",
     response_model=CallDetail,
-
     summary="Распознать запись на сервере (T-one / Whisper / Google)",
-
-    summary="Распознать запись на сервере (Google Speech-to-Text)",
-
 )
 async def transcribe_recording(
     call_id: int, session: SessionDep
@@ -313,15 +305,9 @@ async def transcribe_recording(
             status_code=503,
             detail=error
             or (
-
                 "Серверное распознавание недоступно. Запустите сервер T-one "
                 "и задайте TONE_BASE_URL, установите faster-whisper, "
                 "задайте WHISPER_BASE_URL или GOOGLE_API_KEY."
-
-                "Серверное распознавание недоступно. Установите "
-                "faster-whisper, задайте WHISPER_BASE_URL или "
-                "GOOGLE_API_KEY."
-
             ),
         )
 

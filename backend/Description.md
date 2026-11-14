@@ -245,7 +245,7 @@ erDiagram
 - Параметры: `stream=false`, `format=json`, `think=false`,
   `options.num_ctx`, `options.num_predict`, `keep_alive`.
 - `think=false` отключает «размышления» Qwen3, чтобы получить чистый JSON.
-- Модели: `qwen3:4b` (основная), `qwen3:1.7b` (быстрее),
+- Модели: `qwen3:4b-instruct` (основная), `qwen3:1.7b` (быстрее),
   `qwen3:8b` (качественнее, но на CPU медленно).
 - Провайдер: `ai_module/providers/text_provider.py`.
 
@@ -270,6 +270,8 @@ erDiagram
 - Backend отправляет аудио на `TONE_BASE_URL + TONE_ENDPOINT`
   (`/audio/transcriptions`) как `multipart/form-data`.
 - Ожидаемый ответ: `{"text": "...", "language": "ru", "segments": [...]}`.
+- Потоковый режим: `WS /api/voice/stream` → T-one `/ws/transcriptions`,
+  PCM16LE mono 8 kHz, чанки 300 мс (2400 сэмплов), `finalize` в конце.
 - Провайдер: `ai_module/providers/speech_provider.py`.
 - Резерв: HTTP Whisper (`WHISPER_BASE_URL`), локальный `faster-whisper`,
   Google STT — по цепочке `auto`.
@@ -303,7 +305,7 @@ Ollama: при переходе от vision к тексту Ollama выгруж�
 OLLAMA_MAX_LOADED_MODELS=1
 OLLAMA_NUM_PARALLEL=1
 OLLAMA_KEEP_ALIVE=2m
-OLLAMA_MODEL=qwen3:4b
+OLLAMA_MODEL=qwen3:4b-instruct
 OLLAMA_NUM_CTX=4096
 OLLAMA_NUM_PREDICT=768
 OLLAMA_VISION_MODEL=qwen3-vl:2b
@@ -315,6 +317,26 @@ VISION_TIMEOUT_SECONDS=240
 
 `OLLAMA_MAX_LOADED_MODELS` и `OLLAMA_NUM_PARALLEL` — переменные **демона**
 Ollama (systemd/окружение), а не backend.
+
+### 6.7. Qdrant и база знаний
+
+- Qdrant — векторная БД для семантического поиска статей (`knowledge_articles`).
+- Эмбеддинги считает Ollama (`/api/embeddings`, модель `nomic-embed-text`).
+- При старте backend индексирует статьи из `json/knowledge_articles.json`.
+- Если Qdrant/эмбеддинги недоступны, используется keyword-поиск по БД.
+- Рекомендации сохраняются в `ticket_kb_articles` и отдаются в `TicketDetail`.
+- Переиндексация: `POST /api/knowledge/reindex`; состояние: `GET /api/knowledge/status`.
+
+### 6.8. Статистика и чат
+
+- `GET /api/stats` агрегирует заявки, приоритеты, категории, нагрузку
+  инженеров, звонки, SLA-риски и почасовую активность. Используется
+  админ-панелью.
+- `POST /api/tickets/{id}/chat` сохраняет сообщение пользователя, генерирует
+  ответ Qwen3 (с `/no_think`), сохраняет ответ ассистента и обновляет поля
+  заявки rule-based анализом без второго вызова LLM.
+- Страница `/knowledge` показывает статьи и поиск Qdrant; чат клиента
+  использует реальные ответы модели, а не заготовки.
 
 ---
 
@@ -404,6 +426,8 @@ Live-субтитры браузера (Google Web Speech) **выключены 
 | `GET/POST` | `/api/tickets/{id}/attachments` | вложения |
 | `GET` | `/api/tickets/{id}/calls` | звонки заявки |
 | `POST` | `/api/tickets/{id}/analyze` | ИИ-анализ |
+| `POST` | `/api/tickets/{id}/chat` | сообщение + реальный ответ LLM |
+| `POST` | `/api/tickets/{id}/chat/stream` | потоковый ответ LLM (SSE) |
 | `GET` | `/api/attachments/{id}/content` | файл |
 | `POST` | `/api/attachments/{id}/describe` | описать фото (Qwen3-VL) |
 | `DELETE` | `/api/attachments/{id}` | удалить вложение |
@@ -417,6 +441,7 @@ Live-субтитры браузера (Google Web Speech) **выключены 
 | `POST` | `/api/voice/transcribe` | речь → текст |
 | `POST` | `/api/voice/tts` | текст → речь |
 | `POST` | `/api/voice/chat` | T-one → Qwen3 → Silero |
+| `WS` | `/api/voice/stream` | потоковый T-one (PCM16LE 8k, 300 мс) |
 | `GET` | `/api/voice/status` | статус STT/TTS/vision |
 | `POST` | `/api/telephony/sip/calls` | SIP: старт |
 | `POST` | `/api/telephony/sip/calls/{id}/ended` | SIP: завершение |
@@ -426,6 +451,11 @@ Live-субтитры браузера (Google Web Speech) **выключены 
 | `GET` | `/api/ai/taxonomy` | справочник кодов |
 | `POST` | `/api/ai/analyze-text` | анализ без заявки |
 | `GET` | `/api/ai/tickets/{id}` | сохранённый анализ |
+| `GET` | `/api/stats` | агрегированная статистика |
+| `GET` | `/api/knowledge/articles` | статьи базы знаний |
+| `GET` | `/api/knowledge/search` | семантический поиск |
+| `GET` | `/api/knowledge/status` | состояние Qdrant |
+| `POST` | `/api/knowledge/reindex` | переиндексация Qdrant |
 | `GET` | `/api/health` | состояние и модели |
 
 SIP-эндпоинты защищены `X-Telephony-Token`.

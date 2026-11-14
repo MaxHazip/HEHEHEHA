@@ -13,6 +13,8 @@ from backend.api.routes import (
     ai,
     attachments,
     calls,
+    knowledge,
+    stats,
     telephony,
     tickets,
     users,
@@ -35,6 +37,12 @@ async def lifespan(_app: FastAPI):
     await init_db()
     async with create_session_maker() as session:
         await seed_demo_data(session)
+        try:
+            from backend.services.knowledge import ensure_index
+
+            await ensure_index(session)
+        except Exception:  # noqa: BLE001
+            logger.exception("Не удалось проиндексировать базу знаний")
 
     ari_runner.start()
 
@@ -72,6 +80,8 @@ app.include_router(telephony.router)
 app.include_router(ai.router)
 app.include_router(users.router)
 app.include_router(voice.router)
+app.include_router(knowledge.router)
+app.include_router(stats.router)
 
 
 @app.get("/", tags=["system"])

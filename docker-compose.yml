@@ -42,7 +42,7 @@ services:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b-instruct}
       OLLAMA_THINK: ${OLLAMA_THINK:-false}
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-4096}
       OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-768}
@@ -70,7 +70,11 @@ services:
       SILERO_TTS_URL: ${SILERO_TTS_URL:-http://host.docker.internal:8003}
       SILERO_TTS_ENDPOINT: ${SILERO_TTS_ENDPOINT:-/tts}
       SILERO_SPEAKER: ${SILERO_SPEAKER:-aidar}
-      SILERO_SAMPLE_RATE: ${SILERO_SAMPLE_RATE:-48000}
+      SILERO_SAMPLE_RATE: ${SILERO_SAMPLE_RATE:-24000}
+      QDRANT_ENABLED: ${QDRANT_ENABLED:-true}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-knowledge_articles}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
       SIP_WEBHOOK_TOKEN: ${SIP_WEBHOOK_TOKEN:-}
       SIP_AUTO_ANALYZE: ${SIP_AUTO_ANALYZE:-true}
       ARI_ENABLED: ${ARI_ENABLED:-false}
@@ -86,6 +90,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      qdrant:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: uvicorn backend.main:app --host 0.0.0.0 --port 8000

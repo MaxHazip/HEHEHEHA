@@ -1,12 +1,24 @@
 """Голосовые ИИ-эндпоинты: T-one (STT), Qwen3 (анализ) и Silero (TTS)."""
 
+import asyncio
 import base64
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import Response
+from websockets.asyncio.client import connect as ws_connect
 
+from ai_module.core.analyzer import get_analyzer
+from ai_module.core.chat import generate_reply
 from ai_module.providers.speech_provider import (
     SpeechProviderError,
     speech_status,
@@ -35,6 +47,18 @@ from backend.services.storage import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
+
+
+def _tone_ws_url() -> str:
+    if settings.TONE_WS_URL:
+        return settings.TONE_WS_URL
+
+    base = (settings.TONE_BASE_URL or "http://localhost:8002").rstrip("/")
+    if base.startswith("https://"):
+        return "wss://" + base[len("https://") :] + "/ws/transcriptions"
+    if base.startswith("http://"):
+        return "ws://" + base[len("http://") :] + "/ws/transcriptions"
+    return base + "/ws/transcriptions"
 
 
 def _reply_for(analysis) -> str:
@@ -159,8 +183,23 @@ async def voice_chat(
             detail="Нужен текст или аудио с распознанной речью",
         )
 
-    analysis = await analyze_free_text(transcript)
-    reply_text = _reply_for(analysis)
+    analysis = await analyze_free_text(transcript, use_llm=False)
+    context = (
+        f"Категория: {analysis.classification.category_code}; "
+        f"проблема: {analysis.issue.description or 'не определена'}; "
+        "вопросы: "
+        + "; ".join(
+            item.question
+            for item in analysis.intake.questions_to_client
+        )
+    )
+    reply_text = await generate_reply(
+        get_analyzer().provider,
+        [{"role": "user", "content": transcript}],
+        context=context,
+    )
+    if not reply_text:
+        reply_text = _reply_for(analysis)
 
     audio_base64: str | None = None
     audio_mime: str | None = None
@@ -179,3 +218,72 @@ async def voice_chat(
         audio_mime=audio_mime,
         provider=provider,
     )
+
+
+@router.websocket("/stream")
+async def voice_stream(websocket: WebSocket) -> None:
+    """Прокси к T-one WebSocket: PCM16LE mono 8 kHz, чанки 300 мс.
+
+    Клиент отправляет binary-чанки (4800 байт = 2400 сэмплов), в конце —
+    текст ``finalize``. T-one отвечает JSON с partial/final текстом.
+    """
+
+    await websocket.accept()
+
+    try:
+        upstream = await ws_connect(
+            _tone_ws_url(),
+            max_size=8 * 1024 * 1024,
+            ping_interval=20,
+            ping_timeout=20,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("T-one WS connect failed: %s", exc)
+        await websocket.close(
+            code=1011, reason="T-one WebSocket недоступен"
+        )
+        return
+
+    async def client_to_upstream() -> None:
+        while True:
+            message = await websocket.receive()
+            if message.get("type") == "websocket.disconnect":
+                break
+            if message.get("bytes") is not None:
+                await upstream.send(message["bytes"])
+            elif message.get("text") is not None:
+                await upstream.send(message["text"])
+
+    async def upstream_to_client() -> None:
+        try:
+            async for data in upstream:
+                if isinstance(data, bytes):
+                    await websocket.send_bytes(data)
+                else:
+                    await websocket.send_text(data)
+        except Exception:  # noqa: BLE001
+            pass
+
+    tasks = [
+        asyncio.create_task(client_to_upstream()),
+        asyncio.create_task(upstream_to_client()),
+    ]
+
+    try:
+        _done, pending = await asyncio.wait(
+            tasks, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        try:
+            await upstream.close()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            await websocket.close()
+        except Exception:  # noqa: BLE001
+            pass

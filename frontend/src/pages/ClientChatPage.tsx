@@ -1,21 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  Bot,
-  LogOut,
-  Paperclip,
-  Phone,
-  Send,
-  User,
-  X,
-} from 'lucide-react'
+import { Bot, Paperclip, Phone, Send, Sparkles, User, X } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import CallWidget from '@/features/calls/components/CallWidget'
 import {
-  addMessage,
-  analyzeTicket,
   createTicket,
+  streamChatMessage,
   uploadAttachment,
-  type AnalysisResponse,
 } from '@/features/chat/api/chatApi'
 
 type ChatMessage = {
@@ -25,25 +15,7 @@ type ChatMessage = {
   image?: string
 }
 
-function botReply(analysis: AnalysisResponse, ticketId: number): string {
-  const question = analysis.intake.questions_to_client[0]?.question
-  if (question) return question
-
-  if (analysis.intake.state === 'urgent_escalation') {
-    return (
-      'Похоже на серьёзную проблему. Я передал заявку диспетчеру ' +
-      'как срочную — с вами свяжутся.'
-    )
-  }
-
-  return (
-    `Спасибо! Заявка #${ticketId} создана и передана диспетчеру. ` +
-    'При необходимости он задаст уточняющие вопросы.'
-  )
-}
-
 export default function ClientChatPage() {
-  const logout = useAuthStore((s) => s.logout)
   const user = useAuthStore((s) => s.user)
 
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -80,8 +52,6 @@ export default function ClientChatPage() {
         source,
         client_name: user?.name,
         client_phone: user?.phone,
-        // Анализ запустим явно после сообщения и файла, иначе
-        // LLM на CPU отработает дважды.
         auto_analyze: false,
       })
       setTicketId(ticket.id)
@@ -93,14 +63,13 @@ export default function ClientChatPage() {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
+
     const reader = new FileReader()
     reader.onloadend = () => {
       setSelectedImage(reader.result as string)
       setSelectedFile(file)
     }
     reader.readAsDataURL(file)
-
-    // Сбрасываем input, чтобы можно было выбрать тот же файл снова.
     event.target.value = ''
   }
 
@@ -112,17 +81,25 @@ export default function ClientChatPage() {
     const file = selectedFile
     const preview = selectedImage
 
-    const userMessage: ChatMessage = {
-      id: Date.now(),
-      text,
-      sender: 'user',
-      image: preview ?? undefined,
-    }
-    setMessages((prev) => [...prev, userMessage])
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        text,
+        sender: 'user',
+        image: preview ?? undefined,
+      },
+    ])
     setInput('')
     setSelectedFile(null)
     setSelectedImage(null)
     setSending(true)
+
+    const botId = Date.now() + 1
+    setMessages((prev) => [
+      ...prev,
+      { id: botId, text: '', sender: 'bot' },
+    ])
 
     try {
       const activeTicketId = await ensureTicket(
@@ -135,216 +112,262 @@ export default function ClientChatPage() {
         attachmentIds.push(attachment.id)
       }
 
-      if (text || attachmentIds.length > 0) {
-        await addMessage(activeTicketId, text, attachmentIds)
-      }
-
-      const analysis = await analyzeTicket(activeTicketId)
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          text: botReply(analysis, activeTicketId),
-          sender: 'bot',
+      const reply = await streamChatMessage(
+        activeTicketId,
+        text,
+        attachmentIds,
+        (partial) => {
+          setMessages((prev) =>
+            prev.map((item) =>
+              item.id === botId ? { ...item, text: partial } : item,
+            ),
+          )
         },
-      ])
+      )
+
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === botId ? { ...item, text: reply } : item,
+        ),
+      )
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 2,
-          text:
-            'Не удалось отправить обращение. Проверьте, что backend ' +
-            'запущен и доступен.',
-          sender: 'bot',
-        },
-      ])
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === botId
+            ? {
+                ...item,
+                text:
+                  'Не удалось получить ответ. Проверьте, что backend ' +
+                  'запущен и доступен.',
+              }
+            : item,
+        ),
+      )
     } finally {
       setSending(false)
     }
   }
 
-  const handleCallEnd = (transcribedText?: string, aiReply?: string) => {
-    setIsCalling(false)
-    if (transcribedText) {
-      const clientVoiceMsg: Message = { id: Date.now(), text: transcribedText, sender: 'user', isVoice: true }
-      setMessages((prev) => [...prev, clientVoiceMsg])
-      
-      if (aiReply) {
-        setTimeout(() => {
-          const aiVoiceMsg: Message = { id: Date.now() + 1, text: aiReply, sender: 'bot', isVoice: true }
-          setMessages((prev) => [...prev, aiVoiceMsg])
-        }, 500)
-      }
-    }
-  }
-
   return (
-    <div className="h-screen flex flex-col bg-slate-50">
-      <header className="bg-white border-b border-slate-200 p-4 flex justify-between items-center shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center">
-            <Bot size={24} />
+    <div className="space-y-6 pb-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[2px] text-gray-400">
+            Поддержка
           </div>
-          <div>
-            <h1 className="font-semibold text-slate-800">Чат с поддержкой</h1>
-            <p className="text-xs text-emerald-500">
-              {ticketId ? `Заявка #${ticketId}` : 'Бот онлайн'}
-            </p>
-          </div>
+          <h1 className="text-3xl font-semibold tracking-tight text-[#222]">
+            Чат с ассистентом
+          </h1>
+          <p className="mt-2 text-sm text-gray-400">
+            Опишите проблему — ИИ создаст заявку и передаст её диспетчеру.
+          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="rounded-full border border-white bg-white/70 px-4 py-2.5 text-xs text-gray-500 shadow-sm">
+            {ticketId ? `Заявка #${ticketId}` : 'Новое обращение'}
+          </div>
           <button
             type="button"
             onClick={() => setShowCall((value) => !value)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition ${
-              showCall
-                ? 'bg-emerald-600 text-white'
-                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-            }`}
-            title="Позвонить в поддержку"
+            className="button-dark flex items-center gap-2 px-4 py-2.5 text-xs"
           >
-            <Phone size={16} />
-            <span className="hidden sm:inline">Позвонить</span>
-          </button>
-          <button
-            onClick={logout}
-            className="text-slate-400 hover:text-rose-500 transition"
-            title="Выйти"
-          >
-            <LogOut size={20} />
+            <Phone size={15} />
+            {showCall ? 'Скрыть звонок' : 'Позвонить'}
           </button>
         </div>
-      </header>
-
-      {showCall && (
-        <CallWidget
-          ticketId={ticketId}
-          clientPhone={user?.phone}
-          onSaved={(id) => setTicketId((current) => current ?? id)}
-        />
-      )}
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-3xl w-full mx-auto">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${
-              message.sender === 'user' ? 'justify-end' : 'justify-start'
-            }`}
-          >
-            <div
-              className={`flex gap-2 max-w-[85%] ${
-                message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'
-              }`}
-            >
-              <div
-                className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center ${
-                  message.sender === 'user'
-                    ? 'bg-slate-800 text-white'
-                    : 'bg-blue-600 text-white'
-                }`}
-              >
-                {message.sender === 'user' ? (
-                  <User size={16} />
-                ) : (
-                  <Bot size={16} />
-                )}
-              </div>
-
-              <div
-                className={`p-3 rounded-2xl text-sm flex flex-col gap-2 ${
-                  message.sender === 'user'
-                    ? 'bg-slate-800 text-white rounded-tr-sm'
-                    : 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm shadow-sm'
-                }`}
-              >
-                {message.image && (
-                  <img
-                    src={message.image}
-                    alt="Вложение"
-                    className="max-w-[200px] sm:max-w-[300px] rounded-lg border border-slate-600/20"
-                  />
-                )}
-                {message.text && (
-                  <p className="whitespace-pre-wrap">{message.text}</p>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {sending && (
-          <div className="flex justify-start">
-            <div className="bg-white border border-slate-200 text-slate-500 rounded-2xl rounded-tl-sm px-4 py-3 text-sm shadow-sm">
-              Обрабатываю обращение…
-            </div>
-          </div>
-        )}
-
-        <div ref={bottomRef} />
       </div>
 
-      <div className="p-4 bg-white border-t border-slate-200 shrink-0">
-        <div className="max-w-3xl mx-auto">
-          {selectedImage && (
-            <div className="mb-3 relative inline-block">
-              <img
-                src={selectedImage}
-                alt="Превью"
-                className="h-16 w-16 object-cover rounded-lg border border-slate-200 shadow-sm"
-              />
-              <button
-                onClick={() => {
-                  setSelectedImage(null)
-                  setSelectedFile(null)
-                }}
-                className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full p-1 hover:bg-rose-600 transition"
-                title="Удалить фото"
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="glass-card flex h-[68vh] min-h-[520px] flex-col overflow-hidden">
+          <div className="flex items-center gap-3 border-b border-gray-100 p-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#242424] text-white">
+              <Bot size={20} />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-[#222]">
+                AI-ассистент
+              </div>
+              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-emerald-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Онлайн · Qwen3
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 space-y-4 overflow-y-auto p-4">
+            {messages.map((message) => {
+            if (!message.text && !message.image) return null
+
+            return (
+              <div
+                key={message.id}
+                className={`flex ${
+                  message.sender === 'user'
+                    ? 'justify-end'
+                    : 'justify-start'
+                }`}
               >
-                <Phone size={18} />
+                <div
+                  className={`flex max-w-[85%] gap-2 ${
+                    message.sender === 'user'
+                      ? 'flex-row-reverse'
+                      : 'flex-row'
+                  }`}
+                >
+                  <div
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                      message.sender === 'user'
+                        ? 'bg-[#242424] text-white'
+                        : 'border border-gray-200 bg-white text-[#333]'
+                    }`}
+                  >
+                    {message.sender === 'user' ? (
+                      <User size={15} />
+                    ) : (
+                      <Bot size={15} />
+                    )}
+                  </div>
+
+                  <div
+                    className={`flex flex-col gap-2 rounded-2xl p-3 text-sm ${
+                      message.sender === 'user'
+                        ? 'rounded-tr-sm bg-[#242424] text-white'
+                        : 'rounded-tl-sm border border-gray-100 bg-white text-[#333]'
+                    }`}
+                  >
+                    {message.image && (
+                      <img
+                        src={message.image}
+                        alt="Вложение"
+                        className="max-w-[200px] rounded-lg border border-white/20 object-cover sm:max-w-[280px]"
+                      />
+                    )}
+                    {message.text && (
+                      <p className="whitespace-pre-wrap leading-6">
+                        {message.text}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              )
+            })}
+
+            {sending && (
+              <div className="flex justify-start">
+                <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-gray-100 bg-white px-4 py-3 text-xs text-gray-500">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gray-400" />
+                  Ассистент печатает…
+                </div>
+              </div>
+            )}
+
+            <div ref={bottomRef} />
+          </div>
+
+          <form onSubmit={handleSend} className="border-t border-gray-100 p-4">
+            {selectedImage && (
+              <div className="relative mb-3 inline-block">
+                <img
+                  src={selectedImage}
+                  alt="Превью"
+                  className="h-16 w-16 rounded-lg border border-gray-200 object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedImage(null)
+                    setSelectedFile(null)
+                  }}
+                  className="absolute -right-2 -top-2 rounded-full bg-[#242424] p-1 text-white"
+                  title="Удалить фото"
+                >
+                  <X size={11} />
+                </button>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+              />
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-400 transition hover:border-gray-300 hover:text-[#222]"
+                title="Прикрепить фото"
+              >
+                <Paperclip size={18} />
               </button>
 
-          <form onSubmit={handleSend} className="flex gap-2">
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-            />
+              <input
+                type="text"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Опишите проблему..."
+                className="glass-input h-12 flex-1 px-4"
+              />
 
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="p-3 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-xl transition flex items-center justify-center shrink-0"
-              title="Прикрепить фото"
-            >
-              <Paperclip size={20} />
-            </button>
-
-            <input
-              type="text"
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="Напишите сообщение..."
-              className="flex-1 border border-slate-300 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-
-            <button
-              type="submit"
-              disabled={(!input.trim() && !selectedFile) || sending}
-              className="bg-blue-600 text-white px-5 rounded-xl hover:bg-blue-700 transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-            >
-              <Send size={20} />
-            </button>
+              <button
+                type="submit"
+                disabled={(!input.trim() && !selectedFile) || sending}
+                className="button-dark h-12 shrink-0 px-5 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Send size={17} />
+              </button>
+            </div>
           </form>
-        </div>
+        </section>
 
-        {/* Модалка звонка */}
-        <VoiceCallModal isOpen={isCalling} onClose={handleCallEnd} />
+        <aside className="space-y-5">
+          <div className="glass-card p-5">
+            <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[1.5px] text-gray-400">
+              <Sparkles size={14} />
+              Как это работает
+            </div>
+            <ol className="space-y-3 text-sm leading-6 text-gray-600">
+              <li>1. Опишите проблему обычным языком.</li>
+              <li>2. Ассистент уточнит детали и создаст заявку.</li>
+              <li>3. Диспетчер увидит её в общей очереди.</li>
+            </ol>
+
+            {ticketId && (
+              <div className="mt-4 rounded-xl bg-[#f5f5f3] p-3 text-xs leading-5 text-gray-500">
+                Заявка #{ticketId} уже создана. Диалог и рекомендации
+                сохранены в ней.
+              </div>
+            )}
+          </div>
+
+          {showCall && (
+            <div className="glass-card overflow-hidden">
+              <CallWidget
+                ticketId={ticketId}
+                clientPhone={user?.phone}
+                onSaved={(id) =>
+                  setTicketId((current) => current ?? id)
+                }
+              />
+            </div>
+          )}
+
+          <div className="dark-card p-5">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Sparkles size={16} />
+              Локальный ИИ
+            </div>
+            <p className="mt-2 text-xs leading-5 text-white/50">
+              Qwen3 отвечает в чате, T-one распознаёт речь, Silero озвучивает
+              ответы. Данные не уходят в облако.
+            </p>
+          </div>
+        </aside>
       </div>
     </div>
   )

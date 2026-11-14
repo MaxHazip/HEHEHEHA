@@ -7,6 +7,15 @@ export interface Engineer {
   specialty: string
 }
 
+export interface TicketKnowledge {
+  id: number
+  code: string
+  title: string
+  body: string
+  keywords: string[]
+  score?: number | null
+}
+
 export interface Ticket {
   id: number
   title: string
@@ -17,5 +26,6 @@ export interface Ticket {
   status: TicketStatus
   priority: TicketPriority
   assignee: Engineer | null
+  knowledge?: TicketKnowledge[]
   createdAt: string
 }

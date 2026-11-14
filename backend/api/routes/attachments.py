@@ -12,13 +12,7 @@ from backend.models import TicketAttachment
 from backend.schemas.ticket_schemas import AttachmentRead
 from backend.services.storage import file_response
 
-
 router = APIRouter(prefix="/api/attachments", tags=["attachments"])
-
-from backend.api.dependencies import get_current_user
-
-router = APIRouter(prefix="/api/attachments", tags=["attachments"], dependencies=[Depends(get_current_user)])
-
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
@@ -53,34 +47,23 @@ async def download_attachment(
     session: SessionDep,
 ) -> Response:
     attachment = await _get_or_404(session, attachment_id)
-
     if attachment.data is None:
         raise HTTPException(
             status_code=404,
             detail="Файл хранится вне БД и недоступен по этому адресу",
         )
-
-
     return file_response(
         request,
         attachment.data,
         attachment.mime_type,
-
         attachment.file_name,
-
-        attachment.filename,
-
     )
 
 
 @router.post(
     "/{attachment_id}/describe",
     response_model=AttachmentRead,
-
     summary="Описать изображение локальной vision-моделью (Qwen3-VL)",
-
-    summary="Описать изображение с помощью Gemini",
-
 )
 async def describe_image(
     attachment_id: int, session: SessionDep
@@ -91,13 +74,10 @@ async def describe_image(
         raise HTTPException(
             status_code=422, detail="Описать можно только изображение"
         )
-
     if attachment.data is None:
         raise HTTPException(
             status_code=422, detail="Изображение не хранится в БД"
         )
-
-
 
     description = await describe_attachment(
         attachment.data, attachment.mime_type
@@ -106,7 +86,6 @@ async def describe_image(
         raise HTTPException(
             status_code=503,
             detail=(
-
                 "Vision-модель не настроена. Задайте VISION_PROVIDER=ollama "
                 "и OLLAMA_VISION_MODEL (например, qwen3-vl:2b) или ключ Gemini."
             ),

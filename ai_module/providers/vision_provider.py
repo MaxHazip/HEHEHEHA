@@ -7,6 +7,7 @@
 import base64
 import logging
 import os
+import re
 
 import httpx
 
@@ -72,8 +73,41 @@ async def _describe_ollama(
         response.raise_for_status()
         payload = response.json()
 
-    text = str(payload.get("message", {}).get("content", "")).strip()
-    return text or None
+    message = payload.get("message") or {}
+    text = str(message.get("content") or "").strip()
+    if text:
+        return text
+
+    # Qwen3-VL thinking может израсходовать весь num_predict на
+    # message.thinking, оставив content пустым. Берём описание оттуда.
+    thinking = str(message.get("thinking") or "").strip()
+    if thinking:
+        cleaned = re.sub(r"</?think>", "", thinking).strip()
+        lines: list[str] = []
+        for raw_line in cleaned.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            lower = line.lower()
+            if lower.startswith(
+                (
+                    "пользователь",
+                    "нужно",
+                    "сначала",
+                    "важно",
+                    "затем",
+                    "хорошо",
+                    "итак",
+                    "я ",
+                    "описание",
+                )
+            ):
+                continue
+            lines.append(line)
+        candidate = " ".join(lines).strip() or cleaned
+        return candidate[:800].strip() or None
+
+    return None
 
 
 async def _describe_gemini(

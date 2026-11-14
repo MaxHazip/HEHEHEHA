@@ -95,7 +95,7 @@ AI_AUTO_ANALYZE=true
 AI_TIMEOUT_SECONDS=300
 
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen3:4b
+OLLAMA_MODEL=qwen3:4b-instruct
 OLLAMA_THINK=false
 OLLAMA_NUM_CTX=4096
 OLLAMA_NUM_PREDICT=768
@@ -219,7 +219,7 @@ OLLAMA_MAX_LOADED_MODELS=1 OLLAMA_NUM_PARALLEL=1 OLLAMA_KEEP_ALIVE=2m ollama ser
 ### 5.3. Модели
 
 ```bash
-ollama pull qwen3:4b
+ollama pull qwen3:4b-instruct
 ollama pull qwen3-vl:2b
 ollama list
 ```
@@ -227,7 +227,7 @@ ollama list
 Проверка:
 
 ```bash
-ollama run qwen3:4b "Ответь одним словом: ok"
+ollama run qwen3:4b-instruct "Ответь одним словом: ok"
 ollama ps
 ```
 
@@ -383,6 +383,59 @@ file speech.wav
 
 ---
 
+## 7.1. Qdrant и база знаний
+
+Qdrant используется для семантического поиска статей. Если Qdrant или
+модель эмбеддингов недоступны, backend автоматически ищет по ключевым
+словам в БД — приложение продолжает работать.
+
+1. Запустите Qdrant:
+
+```bash
+docker compose up -d qdrant
+```
+
+2. Установите `qdrant-client` (он уже в requirements):
+
+```bash
+pip install -r backend/requirements.txt
+```
+
+3. Скачайте модель эмбеддингов в Ollama:
+
+```bash
+ollama pull nomic-embed-text
+```
+
+4. В `backend/.env`:
+
+```env
+QDRANT_ENABLED=true
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=knowledge_articles
+QDRANT_TOP_K=5
+EMBEDDING_MODEL=nomic-embed-text
+```
+
+5. Перезапустите backend. Индексация выполняется при старте; вручную:
+
+```bash
+curl -X POST http://localhost:8000/api/knowledge/reindex
+```
+
+6. Проверка:
+
+```bash
+curl -s http://localhost:8000/api/knowledge/status
+curl -s "http://localhost:8000/api/knowledge/search?q=не%20работает%20интернет"
+```
+
+Статьи берутся из `json/knowledge_articles.json` и таблицы
+`knowledge_articles`. В Docker у сервиса `web` уже задан
+`QDRANT_URL=http://qdrant:6333`.
+
+---
+
 ## 8. Запуск backend
 
 Вернитесь в корень репозитория и активируйте venv backend:
@@ -449,7 +502,7 @@ docker compose up --build
 
 ```bash
 docker compose --profile ollama up -d
-docker compose exec ollama ollama pull qwen3:4b
+docker compose exec ollama ollama pull qwen3:4b-instruct
 docker compose exec ollama ollama pull qwen3-vl:2b
 ```
 
@@ -640,6 +693,40 @@ curl -s -X POST http://localhost:8000/api/voice/chat \
 python -m pytest backend/tests ai_module/tests -q
 ```
 
+### 12.6. Статистика, база знаний и чат
+
+```bash
+# Реальная статистика для дашбордов
+curl -s http://localhost:8000/api/stats | python -m json.tool
+
+# Семантический поиск (Qdrant или keyword-fallback)
+curl -s "http://localhost:8000/api/knowledge/search?q=dns" | python -m json.tool
+
+# Сообщение пользователя и реальный ответ LLM
+curl -s -X POST http://localhost:8000/api/tickets/1/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Не работает интернет в 305 кабинете"}'
+
+# Потоковый ответ (SSE, текст приходит по мере генерации)
+curl -N -X POST http://localhost:8000/api/tickets/1/chat/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Не работает интернет в 305 кабинете"}'
+```
+
+WebSocket для потокового T-one:
+
+```
+WS /api/voice/stream
+```
+
+Формат: PCM16LE mono **8 kHz**, бинарные чанки по 300 мс
+(2400 сэмплов = 4800 байт), в конце текстовое `finalize`. Backend
+проксирует их в T-one `/ws/transcriptions` и возвращает partial/final JSON.
+
+Страница `/knowledge` в интерфейсе показывает статьи, результаты поиска и
+состояние Qdrant. Админ-панель `/analytics` использует реальный
+`/api/stats`.
+
 ---
 
 ## 13. Частые проблемы
@@ -651,8 +738,8 @@ python -m pytest backend/tests ai_module/tests -q
 | Backend не стартует | Проверьте `backend/.env` и `python -c "from backend.core.settings import settings"`. |
 | `alembic: table already exists` | Удалите старую `dispatcher.db` или пересоздайте volume Postgres. |
 | ИИ пишет «офлайн-анализ» | Ollama не отвечает: `ollama list`, `curl localhost:11434/api/tags`. |
-| `model "qwen3:4b" not found` | `ollama pull qwen3:4b`. |
-| Очень медленный анализ | CPU: используйте `qwen3:4b`/`1.7b`, `OLLAMA_MAX_LOADED_MODELS=1`, не держите 8B. |
+| `model "qwen3:4b-instruct" not found` | `ollama pull qwen3:4b-instruct`. |
+| Очень медленный анализ | CPU: используйте `qwen3:4b-instruct`/`1.7b`, `OLLAMA_MAX_LOADED_MODELS=1`, не держите 8B. |
 | Таймаут LLM | `AI_TIMEOUT_SECONDS=300`; первый запуск грузит модель. |
 | Vision 503 | `OLLAMA_VISION_MODEL=qwen3-vl:2b`, модель скачана, `VISION_PROVIDER=ollama`. |
 | T-one 503 | Сервер не запущен или неверный `TONE_BASE_URL`/`TONE_ENDPOINT`. |

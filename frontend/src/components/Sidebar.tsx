@@ -1,15 +1,21 @@
 import { NavLink } from 'react-router-dom'
-import { BookOpen, Inbox, LayoutDashboard, Phone, Wrench, Users } from 'lucide-react'
+import { BarChart3, BookOpen, Inbox, LayoutDashboard, MessageSquare, Phone, Settings, Wrench, Users } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 
 export default function Sidebar() {
   const role = useAuthStore((s) => s.role)
 
-  // Меню для диспетчера (ровно 4 вкладки, без Базы знаний)
+  // Меню для диспетчера
   const dispatcherMenu = [
     { to: '/dashboard', label: 'Главная', icon: LayoutDashboard },
     { to: '/tickets', label: 'Входящие заявки', icon: Inbox },
     { to: '/calls', label: 'Звонки', icon: Phone },
+    { to: '/employees', label: 'Исполнители', icon: Users },
+    { to: '/knowledge', label: 'База знаний', icon: BookOpen },
+  ]
+
+  const adminMenu = [
+    { to: '/analytics', label: 'Аналитика', icon: BarChart3 },
     { to: '/employees', label: 'Исполнители', icon: Users },
     { to: '/knowledge', label: 'База знаний', icon: BookOpen },
   ]
@@ -35,7 +41,9 @@ export default function Sidebar() {
       ? engineerMenu
       : role === 'client'
         ? clientMenu
-        : dispatcherMenu
+        : role === 'admin'
+          ? adminMenu
+          : dispatcherMenu
 
   return (
     <aside className="app-sidebar">

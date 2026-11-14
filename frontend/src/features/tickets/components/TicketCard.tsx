@@ -4,6 +4,7 @@ import {
   UserCircle2,
   Wrench,
   AlertCircle,
+  BookOpen,
   CheckCircle2,
   Pencil,
   X,
@@ -250,6 +251,48 @@ export default function TicketCard({ ticket }: Props) {
           </p>
         )}
       </div>
+
+      {/* Рекомендованные статьи базы знаний */}
+
+      {ticket.knowledge && ticket.knowledge.length > 0 && (
+        <div className="mt-5 rounded-2xl border border-gray-100 bg-white p-4">
+          <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+            <BookOpen size={14} />
+            Рекомендованные статьи
+          </div>
+
+          <div className="space-y-2">
+            {ticket.knowledge.slice(0, 3).map((article) => (
+              <div
+                key={article.id}
+                className="rounded-xl bg-[#f5f5f3] p-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-[#222]">
+                      {article.title}
+                    </div>
+                    <div className="mt-0.5 text-[9px] uppercase tracking-[1px] text-gray-400">
+                      {article.code}
+                    </div>
+                  </div>
+
+                  {article.score !== null &&
+                    article.score !== undefined && (
+                      <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[9px] font-semibold text-gray-500">
+                        {Math.round(article.score * 100)}%
+                      </span>
+                    )}
+                </div>
+
+                <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-gray-500">
+                  {article.body}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Дополнительные документы */}
 

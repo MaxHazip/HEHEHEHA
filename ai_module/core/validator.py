@@ -173,6 +173,11 @@ def _merge_extracted(result: TicketAIResult, payload: dict) -> None:
     for field in ("building", "floor", "room"):
         value = as_text(location.get(field)) or as_text(source.get(field))
         if value:
+            current = getattr(extracted.location, field)
+            # Если правило нашло более полное значение ("Пушкин 21ц"),
+            # а LLM вернула только "Пушкин", оставляем полное.
+            if current and value in current:
+                value = current
             setattr(extracted.location, field, value)
 
     for field in ("device", "ip_address", "serial_number", "hostname", "object"):

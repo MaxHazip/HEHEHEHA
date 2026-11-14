@@ -1,6 +1,5 @@
 """Преобразование ORM-моделей в ответы API."""
 
-
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -13,16 +12,16 @@ from backend.models import (
     Category,
     ChatMessage,
     Engineer,
+    KnowledgeArticle,
     Subcategory,
     Ticket,
     TicketAnalysis,
     TicketAttachment,
+    TicketKBArticle,
     User,
 )
-
-from backend.models import Call, Ticket, TicketAttachment, TicketMessage, User
-
 from backend.schemas.call_schemas import CallDetail, CallRead
+from backend.schemas.knowledge_schemas import KnowledgeArticleRead
 from backend.schemas.ticket_schemas import (
     AttachmentRead,
     CallSummary,
@@ -31,7 +30,6 @@ from backend.schemas.ticket_schemas import (
     TicketSummary,
     UserRead,
 )
-
 from backend.services.ai_service import (
     analysis_result,
     latest_analysis,
@@ -46,18 +44,12 @@ def user_read(
     specialty: str | None = None,
     engineer_id: int | None = None,
 ) -> UserRead | None:
-
-
-
-def user_read(user: User | None) -> UserRead | None:
-
     if user is None:
         return None
     return UserRead(
         id=user.id,
         name=user.name,
         role=user.role,
-
         email=user.email,
         specialty=specialty,
         engineer_id=engineer_id,
@@ -77,28 +69,15 @@ async def _assignee(
     return user_read(user, specialty, engineer.id)
 
 
-
-        specialty=user.specialty,
-        phone=user.phone,
-    )
-
-
-
 def attachment_read(attachment: TicketAttachment) -> AttachmentRead:
     return AttachmentRead(
         id=attachment.id,
         ticket_id=attachment.ticket_id,
         message_id=attachment.message_id,
         kind=attachment.kind,
-
         filename=attachment.file_name,
         mime_type=attachment.mime_type,
         size_bytes=attachment.file_size,
-
-        filename=attachment.filename,
-        mime_type=attachment.mime_type,
-        size_bytes=attachment.size_bytes,
-
         sha256=attachment.sha256,
         description=attachment.description,
         url=f"/api/attachments/{attachment.id}/content",
@@ -107,25 +86,15 @@ def attachment_read(attachment: TicketAttachment) -> AttachmentRead:
 
 
 def message_read(
-
     message: ChatMessage,
     ticket_id: int | None,
-
-    message: TicketMessage,
-
     attachments: list[AttachmentRead] | None = None,
 ) -> MessageRead:
     return MessageRead(
         id=message.id,
-
         ticket_id=ticket_id,
         role=message.role,
         text=message.content,
-
-        ticket_id=message.ticket_id,
-        role=message.role,
-        text=message.text,
-
         created_at=message.created_at,
         attachments=attachments or [],
     )
@@ -193,7 +162,6 @@ def call_detail(call: Call, segments: list) -> CallDetail:
     )
 
 
-
 def _title(
     ticket: Ticket,
     category: Category | None,
@@ -222,8 +190,47 @@ async def _ai_fields(
     return analysis, analysis_result(analysis)
 
 
+async def load_knowledge_for_tickets(
+    session: AsyncSession, ticket_ids: list[int]
+) -> dict[int, list[KnowledgeArticleRead]]:
+    if not ticket_ids:
+        return {}
+
+    rows = (
+        await session.execute(
+            select(
+                TicketKBArticle.ticket_id,
+                KnowledgeArticle,
+                TicketKBArticle.relevance_score,
+            )
+            .join(
+                KnowledgeArticle,
+                TicketKBArticle.article_id == KnowledgeArticle.id,
+            )
+            .where(TicketKBArticle.ticket_id.in_(ticket_ids))
+            .order_by(TicketKBArticle.relevance_score.desc())
+        )
+    ).all()
+
+    result: dict[int, list[KnowledgeArticleRead]] = {}
+    for ticket_id, article, score in rows:
+        result.setdefault(ticket_id, []).append(
+            KnowledgeArticleRead(
+                id=article.id,
+                code=article.code,
+                title=article.title,
+                body=article.body,
+                keywords=list(article.keywords or []),
+                score=score,
+            )
+        )
+    return result
+
+
 async def build_ticket_summary(
-    session: AsyncSession, ticket: Ticket
+    session: AsyncSession,
+    ticket: Ticket,
+    knowledge: list[KnowledgeArticleRead] | None = None,
 ) -> TicketSummary:
     assignee = await _assignee(session, ticket)
 
@@ -244,12 +251,20 @@ async def build_ticket_summary(
     if result is not None and result.issue.description:
         description = result.issue.description
 
-    ai_description = render_summary(result) if result is not None else None
+    ai_description = ticket.ai_description or (
+        render_summary(result) if result is not None else None
+    )
     ai_solution = (
         "\n".join(result.decision_notes)
         if result is not None and result.decision_notes
         else None
     )
+
+    if knowledge is None:
+        knowledge_map = await load_knowledge_for_tickets(
+            session, [ticket.id]
+        )
+        knowledge = knowledge_map.get(ticket.id, [])
 
     return TicketSummary(
         id=ticket.id,
@@ -270,29 +285,11 @@ async def build_ticket_summary(
                 result.confidence.overall if result is not None else None
             )
         ),
-
-def ticket_summary(ticket: Ticket, assignee: User | None) -> TicketSummary:
-    return TicketSummary(
-        id=ticket.id,
-        title=ticket.title,
-        description=ticket.description,
-        source=ticket.source,
-        status=ticket.status,
-        priority=ticket.priority,
-        category_code=ticket.category_code,
-        subcategory_code=ticket.subcategory_code,
-        client_name=ticket.client_name,
-        client_phone=ticket.client_phone,
-        assignee=user_read(assignee),
-        ai_description=ticket.ai_description,
-        ai_solution=ticket.ai_solution,
-        ai_confidence=ticket.ai_confidence,
-
         needs_human_review=ticket.needs_human_review,
+        knowledge=knowledge,
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
     )
-
 
 
 async def build_ticket_detail(
@@ -342,18 +339,4 @@ async def build_ticket_detail(
         messages=message_reads,
         attachments=attachment_reads,
         calls=[call_summary(call) for call in calls],
-
-def ticket_detail(
-    ticket: Ticket,
-    assignee: User | None,
-    messages: list[MessageRead],
-    attachments: list[AttachmentRead],
-    calls: list[CallSummary],
-) -> TicketDetail:
-    return TicketDetail(
-        **ticket_summary(ticket, assignee).model_dump(),
-        messages=messages,
-        attachments=attachments,
-        calls=calls,
-
     )

@@ -27,12 +27,22 @@ import threading
 from pathlib import Path
 from typing import Any
 
+import numpy as np  # type: ignore[import-not-found]
+
 # Ограничиваем ONNX Runtime до импорта tone/onnxruntime.
 os.environ.setdefault("OMP_NUM_THREADS", os.getenv("ONNX_NUM_THREADS", "2"))
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import JSONResponse
-from tone import DecoderType, StreamingCTCPipeline, read_audio
+from tone import DecoderType, StreamingCTCPipeline, read_audio  # type: ignore
 
 logger = logging.getLogger(__name__)
 app = FastAPI(title="T-one ASR")
@@ -88,6 +98,7 @@ def _to_wav(src: Path, dst: Path) -> Path:
         ],
         capture_output=True,
         text=True,
+        check=False,
     )
     if proc.returncode != 0:
         lines = (proc.stderr or "").strip().splitlines()
@@ -163,3 +174,121 @@ async def transcriptions(
             ) from exc
 
     return JSONResponse(result)
+
+
+def _phrases_payload(phrases: Any) -> dict[str, Any]:
+    segments = []
+    for phrase in phrases:
+        text = (phrase.text or "").strip()
+        if not text:
+            continue
+        segments.append(
+            {
+                "start": float(phrase.start_time),
+                "end": float(phrase.end_time),
+                "text": text,
+            }
+        )
+    return {
+        "text": " ".join(item["text"] for item in segments),
+        "segments": segments,
+    }
+
+
+async def _send_phrases(
+    websocket: WebSocket, phrases: Any, *, final: bool
+) -> None:
+    await websocket.send_json(
+        {
+            "type": "final" if final else "partial",
+            **_phrases_payload(phrases),
+        }
+    )
+
+
+@app.websocket("/ws/transcriptions")
+async def ws_transcriptions(websocket: WebSocket) -> None:
+    """Потоковое распознавание: PCM16LE mono 8 kHz, чанки 300 мс.
+
+    Клиент отправляет binary-чанки (4800 байт = 2400 сэмплов), в конце —
+    текстовое сообщение ``finalize``. Сервер отвечает JSON вида
+    ``{"type": "partial|final", "text": "...", "segments": [...]}``.
+    """
+
+    await websocket.accept()
+
+    try:
+        pipeline = await asyncio.to_thread(get_pipeline)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("T-one pipeline load failed")
+        await websocket.send_json(
+            {"type": "error", "detail": f"pipeline: {exc}"}
+        )
+        await websocket.close(code=1011)
+        return
+
+    await websocket.send_json(
+        {
+            "type": "ready",
+            "sample_rate": 8000,
+            "chunk_samples": 2400,
+        }
+    )
+
+    state = None
+    buffer = np.empty(0, dtype=np.int16)
+
+    try:
+        while True:
+            message = await websocket.receive()
+            if message.get("type") == "websocket.disconnect":
+                break
+
+            data = message.get("bytes")
+            text = message.get("text")
+
+            if data:
+                incoming = np.frombuffer(data, dtype=np.int16)
+                buffer = (
+                    np.concatenate([buffer, incoming])
+                    if buffer.size
+                    else incoming.copy()
+                )
+
+                while buffer.size >= 2400:
+                    chunk = buffer[:2400].astype(np.int32)
+                    buffer = buffer[2400:]
+                    with _inference_lock:
+                        phrases, state = pipeline.forward(chunk, state)
+                    await _send_phrases(
+                        websocket, phrases, final=False
+                    )
+
+            elif text and text.strip().lower() in (
+                "finalize",
+                "final",
+                "stop",
+            ):
+                if buffer.size:
+                    padded = np.pad(
+                        buffer, (0, 2400 - buffer.size)
+                    ).astype(np.int32)
+                    with _inference_lock:
+                        phrases, state = pipeline.forward(
+                            padded, state, is_last=True
+                        )
+                else:
+                    with _inference_lock:
+                        phrases, state = pipeline.finalize(state)
+
+                await _send_phrases(websocket, phrases, final=True)
+                break
+    except WebSocketDisconnect:
+        pass
+    except Exception:  # noqa: BLE001
+        logger.exception("T-one WebSocket failed")
+    finally:
+        try:
+            await websocket.close()
+        except Exception:  # noqa: BLE001
+            pass

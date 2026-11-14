@@ -45,12 +45,12 @@ def get_model():
     global _model
     if _model is None:
         logger.info("Загружаю Silero TTS на %s", _device)
-        _model, _ = torch.hub.load(
+        _model, _ = torch.hub.load(  # type: ignore[misc]
             "snakers4/silero-models",
             "silero_tts",
             language="ru",
             speaker="v3_1_ru",
-            trust_repo=True,
+            trust_repo="yes",
         )
         _model.to(_device)
     return _model

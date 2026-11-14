@@ -1,27 +1,29 @@
-
-"""Начальные данные: справочники, демо-пользователи и инженеры.
-
-Справочники намеренно добавляются здесь, а не в объявлении моделей:
-схема живёт в Alembic, а данные — в сервисе инициализации.
-"""
+"""Начальные данные: справочники, демо-пользователи и инженеры."""
 
 from __future__ import annotations
 
-"""Демо-данные при первом запуске."""
-
-
+import json
 import logging
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-
 from ai_module.core.taxonomy import TAXONOMY
 from backend.core.settings import settings
-from backend.models import Category, Engineer, Subcategory, User
+from backend.models import (
+    Category,
+    Engineer,
+    KnowledgeArticle,
+    Subcategory,
+    User,
+)
 from backend.services.accounts import hash_password
 
 logger = logging.getLogger(__name__)
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+KNOWLEDGE_FILE = PROJECT_ROOT / "json" / "knowledge_articles.json"
 
 DEMO_USERS: list[dict] = [
     {
@@ -53,47 +55,8 @@ DEMO_USERS: list[dict] = [
         "email": "requester@dispatch.local",
         "role": "requester",
         "competencies": [],
-
-from backend.core.settings import settings
-from backend.models import User
-from backend.core.security import hash_password
-
-logger = logging.getLogger(__name__)
-
-DEMO_USERS = [
-    {
-        "name": "Иван Диспетчеров",
-        "phone": "+70000000001",
-        "role": "dispatcher",
-        "specialty": None,
-    },
-    {
-        "name": "Иван Сетевой",
-        "phone": "+70000000002",
-        "role": "engineer",
-        "specialty": "Сети и интернет",
-    },
-    {
-        "name": "Петр Трубопроводов",
-        "phone": "+70000000003",
-        "role": "engineer",
-        "specialty": "Сантехника",
-    },
-    {
-        "name": "Анна Электрикова",
-        "phone": "+70000000004",
-        "role": "engineer",
-        "specialty": "Электрика",
-    },
-    {
-        "name": "Администратор",
-        "phone": "+70000000005",
-        "role": "admin",
-        "specialty": None,
-
     },
 ]
-
 
 
 async def seed_reference_data(session: AsyncSession) -> None:
@@ -150,9 +113,59 @@ async def seed_reference_data(session: AsyncSession) -> None:
         logger.info("Добавлено записей справочника: %s", created)
 
 
+async def seed_knowledge(session: AsyncSession) -> None:
+    """Загружает статьи базы знаний из json/knowledge_articles.json."""
+
+    if not KNOWLEDGE_FILE.exists():
+        return
+
+    try:
+        items = json.loads(KNOWLEDGE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        logger.warning("Не удалось прочитать %s: %s", KNOWLEDGE_FILE, exc)
+        return
+
+    if not isinstance(items, list):
+        return
+
+    existing = set(
+        (await session.scalars(select(KnowledgeArticle.code))).all()
+    )
+    created = 0
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        code = str(item.get("code") or "").strip()
+        title = str(item.get("title") or "").strip()
+        body = str(item.get("body") or "").strip()
+        if not code or not title or not body or code in existing:
+            continue
+
+        keywords = item.get("keywords") or []
+        if not isinstance(keywords, list):
+            keywords = []
+
+        session.add(
+            KnowledgeArticle(
+                code=code,
+                title=title[:255],
+                body=body,
+                keywords=[str(value) for value in keywords],
+            )
+        )
+        existing.add(code)
+        created += 1
+
+    if created:
+        await session.commit()
+        logger.info("Добавлено статей базы знаний: %s", created)
+
+
 async def seed_demo_data(session: AsyncSession) -> None:
     # Справочники нужны всегда: на них ссылаются заявки и ИИ.
     await seed_reference_data(session)
+    await seed_knowledge(session)
 
     if not settings.SEED_DEMO_DATA:
         return
@@ -191,41 +204,3 @@ async def seed_demo_data(session: AsyncSession) -> None:
     if created:
         await session.commit()
         logger.info("Создано демо-записей: %s", created)
-
-async def seed_demo_data(session: AsyncSession) -> None:
-    if not settings.SEED_DEMO_DATA:
-        return
-
-    phones = [user["phone"] for user in DEMO_USERS]
-    existing = set(
-        (
-            await session.scalars(
-                select(User.phone).where(User.phone.in_(phones))
-            )
-        ).all()
-    )
-
-    created = 0
-    demo_password = settings.DEMO_USER_PASSWORD
-    existing_users = (
-        await session.scalars(select(User).where(User.phone.in_(phones)))
-    ).all()
-    by_phone = {user.phone: user for user in existing_users}
-
-    for item in DEMO_USERS:
-        if item["phone"] in existing:
-            # Пароль демо-учётных записей задаётся только оператором через env.
-            current = by_phone.get(item["phone"])
-            if current is not None and demo_password and not current.password_hash:
-                current.password_hash = hash_password(demo_password)
-            continue
-        values = dict(item)
-        if demo_password:
-            values["password_hash"] = hash_password(demo_password)
-        session.add(User(**values))
-        created += 1
-
-    if created:
-        await session.commit()
-        logger.info("Создано демо-пользователей: %s", created)
-

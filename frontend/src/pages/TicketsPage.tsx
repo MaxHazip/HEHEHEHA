@@ -5,9 +5,7 @@ import {
   Clock3,
   CheckCircle2,
   AlertCircle,
-  Plus,
   SlidersHorizontal,
-  ArrowUpRight,
   X,
 } from 'lucide-react'
 import { useTickets } from '@/features/tickets/hooks/useTickets'

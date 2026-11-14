@@ -1,12 +1,19 @@
 import axios from 'axios'
 
+// В dev VITE_API_URL обычно не задан — используем относительный /api,
+// который проксирует Vite. В production можно задать полный URL.
+const rawBase = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
+const base = rawBase.replace(/\/$/, '')
+const baseURL = base.endsWith('/api') ? base : `${base}/api`
+
 export const api = axios.create({
-  // Берем URL из файла .env, если его нет — используем localhost:8000/api
-  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api',
+  baseURL,
   headers: { 'Content-Type': 'application/json' },
+  // ИИ на CPU может отвечать минутами.
+  timeout: 300_000,
 })
 
-// Перехватчик: автоматически добавляет токен авторизации к каждому запросу
+// Автоматически добавляет токен, если он есть (сейчас логин — mock).
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('auth_token')
   if (token) {

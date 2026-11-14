@@ -61,6 +61,103 @@ export interface AnalysisResponse {
   }
 }
 
+export interface ChatReply {
+  reply: string
+  ticket_id: number
+}
+
+export async function sendChatMessage(
+  ticketId: number,
+  text: string,
+  attachmentIds: number[] = [],
+): Promise<ChatReply> {
+  const { data } = await api.post<ChatReply>(
+    `/api/tickets/${ticketId}/chat`,
+    { text, attachment_ids: attachmentIds },
+    { timeout: AI_TIMEOUT_MS },
+  )
+  return data
+}
+
+export async function streamChatMessage(
+  ticketId: number,
+  text: string,
+  attachmentIds: number[] = [],
+  onDelta: (fullText: string) => void = () => undefined,
+): Promise<string> {
+  const base = String(api.defaults.baseURL ?? '').replace(/\/$/, '')
+  const response = await fetch(
+    `${base}/api/tickets/${ticketId}/chat/stream`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify({
+        text,
+        attachment_ids: attachmentIds,
+      }),
+    },
+  )
+
+  if (!response.ok || !response.body) {
+    const detail = await response.text()
+    throw new Error(detail || `HTTP ${response.status}`)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let full = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    let boundary = buffer.indexOf('\n\n')
+
+    while (boundary >= 0) {
+      const eventBlock = buffer.slice(0, boundary)
+      buffer = buffer.slice(boundary + 2)
+
+      for (const line of eventBlock.split('\n')) {
+        if (!line.startsWith('data:')) continue
+        const raw = line.slice(5).trim()
+        if (!raw) continue
+
+        let event: {
+          delta?: string
+          done?: boolean
+          reply?: string
+        }
+        try {
+          event = JSON.parse(raw)
+        } catch {
+          continue
+        }
+
+        if (typeof event.delta === 'string') {
+          full += event.delta
+          onDelta(full)
+        }
+
+        if (event.done) {
+          if (typeof event.reply === 'string' && event.reply) {
+            full = event.reply
+          }
+          return full
+        }
+      }
+
+      boundary = buffer.indexOf('\n\n')
+    }
+  }
+
+  return full
+}
+
 export async function createTicket(
   payload: CreateTicketPayload,
 ): Promise<TicketResponse> {

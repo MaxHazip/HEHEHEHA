@@ -81,6 +81,9 @@ class Ticket(Base):
 
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
 
+    # Ручная правка текста ИИ диспетчером (необязательное переопределение).
+    ai_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     channel: Mapped[str] = mapped_column(String(20), nullable=False)
 
     status: Mapped[str] = mapped_column(

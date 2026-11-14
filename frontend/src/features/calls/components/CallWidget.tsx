@@ -5,7 +5,6 @@ import {
   Mic,
   Phone,
   PhoneOff,
-  Server,
 } from 'lucide-react'
 import { wsUrl } from '@/lib/api'
 import {
@@ -38,7 +37,6 @@ export default function CallWidget({
     transcript,
     interim,
     error: recorderError,
-    speechSupported,
     secureContext,
     microphoneSupported,
     start,
@@ -204,23 +202,6 @@ export default function CallWidget({
           </div>
         </div>
 
-        <div className="min-h-[64px] rounded-lg bg-slate-50 border border-slate-200 p-3 text-sm text-slate-700">
-          {transcript || interim ? (
-            <p className="whitespace-pre-wrap">
-              {transcript}
-              {interim && (
-                <span className="text-slate-400"> {interim}</span>
-              )}
-            </p>
-          ) : (
-            <p className="text-slate-400">
-              {isActive
-                ? 'Говорите — распознанный текст появится здесь и у диспетчера.'
-                : 'Нажмите «Позвонить», чтобы записать обращение.'}
-            </p>
-          )}
-        </div>
-
         {!secureContext && (
           <p className="text-xs text-rose-600">
             Браузер блокирует микрофон на http://IP. Откройте
@@ -234,20 +215,6 @@ export default function CallWidget({
           <p className="text-xs text-rose-600">
             Браузер не поддерживает запись с микрофона. Используйте
             актуальный Chrome/Edge.
-          </p>
-        )}
-
-        {!speechSupported && (
-          <p className="text-xs text-slate-400 flex items-center gap-1">
-            <Server size={12} /> Живые субтитры в браузере выключены.
-            Расшифровка выполняется локально (T-one) после звонка.
-          </p>
-        )}
-
-        {speechSupported && (
-          <p className="text-xs text-slate-400 flex items-center gap-1">
-            <Server size={12} /> Если браузер не распознает речь, backend
-            сделает это через T-one.
           </p>
         )}
 
