@@ -327,6 +327,7 @@ async def transcriptions(
 
 ```bash
 TORCH_NUM_THREADS=2 uvicorn server:app --host 0.0.0.0 --port 8002
+TONE_DECODER=greedy OMP_NUM_THREADS=2 uvicorn server:app --host 0.0.0.0 --port 8002
 ```
 
 Проверка:
