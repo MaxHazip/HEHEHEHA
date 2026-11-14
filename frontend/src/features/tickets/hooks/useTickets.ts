@@ -3,7 +3,7 @@ import { ticketsApi } from '../api/ticketsApi'
 import type { Engineer } from '@/types/ticket.types'
 
 export function useTickets() {
-  return useQuery({ queryKey: ['tickets'], queryFn: ticketsApi.getTickets })
+  return useQuery({ queryKey: ['tickets'], queryFn: ({ signal }) => ticketsApi.getTickets(signal) })
 }
 
 export function useEngineers() {

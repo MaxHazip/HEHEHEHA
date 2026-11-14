@@ -35,9 +35,18 @@ async function update(id: number, changes: object): Promise<void> {
 }
 
 export const ticketsApi = {
-  async getTickets(): Promise<Ticket[]> {
-    const { data } = await api.get<TicketRead[]>('/api/tickets')
-    return data.map((ticket) => ({
+  async getTickets(signal?: AbortSignal): Promise<Ticket[]> {
+    const tickets = new Map<number, TicketRead>()
+    const limit = 100
+    for (let offset = 0; ; offset += limit) {
+      const { data } = await api.get<TicketRead[]>('/api/tickets', {
+        params: { limit, offset },
+        signal,
+      })
+      for (const ticket of data) tickets.set(ticket.id, ticket)
+      if (data.length < limit) break
+    }
+    return Array.from(tickets.values()).map((ticket) => ({
       id: ticket.id,
       title: ticket.title,
       aiDescription: ticket.ai_description ?? ticket.description,

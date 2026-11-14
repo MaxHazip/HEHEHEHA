@@ -180,7 +180,7 @@ async def list_tickets(
         stmt = stmt.where(Ticket.engineer_id == assignee_id)
 
     stmt = (
-        stmt.order_by(Ticket.created_at.desc())
+        stmt.order_by(Ticket.created_at.desc(), Ticket.id.desc())
         .limit(min(limit, 200))
         .offset(offset)
     )
