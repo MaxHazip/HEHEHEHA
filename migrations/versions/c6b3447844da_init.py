@@ -510,6 +510,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("ticket_id", "article_id"),
     )
 
+    create_calls_table()
+    create_transcript_table()
+
+
+def create_calls_table() -> None:
     op.create_table(
         "calls",
         sa.Column("id", _bigint(), autoincrement=True, nullable=False),
@@ -572,6 +577,9 @@ def upgrade() -> None:
     )
     op.create_index("ix_calls_created_at", "calls", ["created_at"], unique=False)
 
+
+
+def create_transcript_table() -> None:
     op.create_table(
         "call_transcript_segments",
         sa.Column("id", _bigint(), autoincrement=True, nullable=False),
