@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from backend.models.engineer_models import Engineer
     from backend.models.chat_session import ChatSession
     from backend.models.ticket import Ticket
+    from backend.models.ticket_event import TicketEvent
 
 
 class User(Base):
@@ -63,6 +64,12 @@ class User(Base):
         server_default=text("true"),
     )
 
+    phone: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        unique=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -90,4 +97,9 @@ class User(Base):
         "Ticket",
         back_populates="confirmer",
         foreign_keys="Ticket.confirmed_by",
+    )
+
+    ticket_events: Mapped[list["TicketEvent"]] = relationship(
+        "TicketEvent",
+        back_populates="actor",
     )

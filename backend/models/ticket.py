@@ -27,6 +27,8 @@ if TYPE_CHECKING:
     from backend.models.engineer_models import Engineer
     from backend.models.subcategories_models import Subcategory
     from backend.models.user_models import User
+    from backend.models.ticket_analysis import TicketAnalysis
+    from backend.models.ticket_event import TicketEvent
 
 
 class TicketStatuses(str, enum.Enum):
@@ -55,7 +57,7 @@ class Ticket(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
-    chat_session_id: Mapped[PG_UUID] = mapped_column(
+    chat_session_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("chat_sessions.id", ondelete="RESTRICT"),
         nullable=False,
@@ -200,3 +202,16 @@ class Ticket(Base):
         foreign_keys=[recommended_engineer_id],
         back_populates="recommended_tickets",
     )
+
+    analyses: Mapped[list["TicketAnalysis"]] = relationship(
+        "TicketAnalysis",
+        back_populates="ticket",
+    )
+
+    events: Mapped[list["TicketEvent"]] = relationship(
+        "TicketEvent",
+        back_populates="ticket",
+        order_by="TicketEvent.created_at",
+    )
+
+    

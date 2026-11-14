@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from backend.models.chat_message import ChatMessage
     from backend.models.ticket import Ticket
     from backend.models.user_models import User
+    from backend.models.ticket_analysis import TicketAnalysis
 
 import enum
 
@@ -35,13 +36,6 @@ class ChatSessionStatuses(str, enum.Enum):
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
-    __table_args__ = (
-        CheckConstraint(
-            "status IN ('active', 'completed', 'cancelled')",
-            name="ck_chat_sessions_status",
-        ),
-    )
-
     id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         primary_key=True,
@@ -50,9 +44,9 @@ class ChatSession(Base):
 
     user_id: Mapped[int] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="RESTRICT"), 
+        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
-        index=True,            
+        index=True,
     )
 
     status: Mapped[ChatSessionStatuses] = mapped_column(
@@ -98,4 +92,9 @@ class ChatSession(Base):
         "Ticket",
         back_populates="chat_session",
         uselist=False,
+    )
+
+    analyses: Mapped[list["TicketAnalysis"]] = relationship(
+        "TicketAnalysis",
+        back_populates="chat_session",
     )

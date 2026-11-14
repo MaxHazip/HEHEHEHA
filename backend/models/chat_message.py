@@ -16,6 +16,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+import uuid
+
 from backend.core.database import Base  
 
 if TYPE_CHECKING:
@@ -43,7 +45,7 @@ class ChatMessage(Base):
         autoincrement=True,
     )
 
-    session_id: Mapped[PG_UUID] = mapped_column(  
+    session_id: Mapped[uuid.UUID] = mapped_column(  
         PG_UUID(as_uuid=True),
         ForeignKey("chat_sessions.id", ondelete="CASCADE"),
         nullable=False,
