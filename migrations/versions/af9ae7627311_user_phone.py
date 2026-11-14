@@ -20,7 +20,7 @@ DEMO_PHONES = {
 
 def upgrade() -> None:
     op.add_column("users", sa.Column("phone", sa.String(32), nullable=True))
-    users = sa.table("users", sa.column("id"), sa.column("email"), sa.column("phone"))
+    users = sa.table("users", sa.column("id", sa.BigInteger()), sa.column("email", sa.String(255)), sa.column("phone", sa.String(32)))
     for name, phone in DEMO_PHONES.items():
         op.execute(
             users.update().where(sa.func.lower(users.c.email) == f"{name}@dispatch.local")
@@ -44,7 +44,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    users = sa.table("users", sa.column("id"), sa.column("legacy_email"))
+    users = sa.table("users", sa.column("id", sa.BigInteger()), sa.column("legacy_email", sa.String(255)))
     op.execute(users.update().where(users.c.legacy_email.is_(None)).values(
         legacy_email=sa.literal("rollback-") + sa.cast(users.c.id, sa.String()) + "@dispatch.invalid"
     ))
