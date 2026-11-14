@@ -1,7 +1,7 @@
 """Switch accounts to phone numbers, preserving account IDs and references."""
 
 import sqlalchemy as sa
-from alembic import op
+from alembic import context, op
 
 revision = "af9ae7627311"
 down_revision = "48afd2ad950e"
@@ -18,7 +18,45 @@ DEMO_PHONES = {
 }
 
 
+def _upgrade_legacy_postgresql() -> bool:
+    """Handle the original PostgreSQL schema that already used phones."""
+    if context.is_offline_mode() or op.get_context().dialect.name != "postgresql":
+        return False
+    inspector = sa.inspect(op.get_bind())
+    columns = {column["name"]: column for column in inspector.get_columns("users")}
+    if "phone" not in columns or "email" in columns or "legacy_email" in columns:
+        return False
+
+    op.add_column("users", sa.Column("legacy_email", sa.String(255), nullable=True))
+    op.alter_column(
+        "users", "phone", existing_type=columns["phone"]["type"],
+        type_=sa.String(32), nullable=False,
+    )
+    checks = {item["name"] for item in inspector.get_check_constraints("users")}
+    if "ck_users_role" in checks:
+        op.drop_constraint("ck_users_role", "users", type_="check")
+    op.create_check_constraint(
+        "ck_users_role", "users", "role IN ('requester', 'dispatcher', 'engineer', 'admin')",
+    )
+    if "ck_users_phone_not_blank" not in checks:
+        op.create_check_constraint("ck_users_phone_not_blank", "users", "length(trim(phone)) > 0")
+
+    unique = {
+        item["name"] for item in inspector.get_unique_constraints("users")
+        if item["column_names"] == ["phone"]
+    }
+    if "uq_users_phone" not in unique:
+        if "users_phone_key" in unique:
+            op.execute("ALTER TABLE users RENAME CONSTRAINT users_phone_key TO uq_users_phone")
+        else:
+            op.create_unique_constraint("uq_users_phone", "users", ["phone"])
+    return True
+
+
 def upgrade() -> None:
+    if _upgrade_legacy_postgresql():
+        return
+
     op.add_column("users", sa.Column("phone", sa.String(32), nullable=True))
     users = sa.table("users", sa.column("id", sa.BigInteger()), sa.column("email", sa.String(255)), sa.column("phone", sa.String(32)))
     for name, phone in DEMO_PHONES.items():
