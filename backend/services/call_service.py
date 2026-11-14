@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_module.core.schemas import TicketAIResult
 from backend.api.serializers import call_detail
-from backend.models import Call, CallTranscriptSegment, ChatMessage, ChatSession, Ticket
+from backend.models import User, Call, CallTranscriptSegment, ChatMessage, ChatSession, Ticket
 from backend.schemas.call_schemas import CallDetail, TranscriptSegmentRead
 from backend.services.accounts import get_or_create_requester
 from backend.services.ai_service import analyze_ticket
@@ -65,7 +65,9 @@ async def ensure_ticket_for_call(
         if ticket is not None:
             return ticket
 
-    requester = await get_or_create_requester(session)
+    requester = await session.get(User, call.created_by) if call.created_by is not None else None
+    if requester is None:
+        requester = await get_or_create_requester(session)
 
     text = (
         call.transcript_text

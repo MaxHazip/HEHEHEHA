@@ -7,7 +7,8 @@ const API_URL =
 
 export const api = axios.create({
   baseURL: API_URL,
-  timeout: 30_000,
+  timeout: 120_000,
+  withCredentials: true,
 })
 
 export function apiUrl(path: string | null | undefined): string | undefined {

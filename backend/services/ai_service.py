@@ -27,6 +27,8 @@ from ai_module.core.taxonomy import (
     subcategory_by_code,
 )
 from ai_module.services.image_service import describe_attachment
+from sqlalchemy import update
+from backend.services.triage import recommend
 from backend.models import (
     Call,
     Category,
@@ -320,8 +322,17 @@ async def analyze_ticket(
     analyzer = get_analyzer()
     result = await analyzer.analyze(request)
 
-    await _apply_classification(session, ticket, result)
-    _apply_result(ticket, result)
+    # Lock the ticket before allocating the next analysis version.
+    await session.execute(
+        update(Ticket).where(Ticket.id == ticket.id).values(updated_at=Ticket.updated_at)
+    )
+    await session.refresh(ticket)
+    if ticket.confirmed_at is None:
+        await _apply_classification(session, ticket, result)
+        _apply_result(ticket, result)
+    await recommend(
+        session, ticket, result.classification.category_code, result.classification.subcategory_code,
+    )
 
     max_version = await session.scalar(
         select(TicketAnalysis.version)

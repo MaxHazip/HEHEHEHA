@@ -4,11 +4,12 @@ import os
 import tempfile
 
 import pytest
+from starlette.websockets import WebSocketDisconnect
 
 # Настройки должны быть заданы до импорта приложения.
 _TMP_DIR = tempfile.mkdtemp(prefix="dispatchai-tests-")
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_TMP_DIR}/test.db"
-os.environ["SEED_DEMO_DATA"] = "false"
+os.environ["SEED_DEMO_DATA"] = "true"
 os.environ["AI_PROVIDER"] = "rule"
 os.environ["SPEECH_PROVIDER"] = "none"
 os.environ["SIP_WEBHOOK_TOKEN"] = "test-telephony-token"
@@ -26,6 +27,7 @@ PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"test-image"
 @pytest.fixture(scope="module")
 def client():
     with TestClient(app) as test_client:
+        assert test_client.post("/api/users/login", json={"phone": "+79991234567", "password": "demo-password"}).status_code == 200
         yield test_client
 
 
@@ -56,6 +58,9 @@ def test_full_ticket_call_flow(client: TestClient) -> None:
     assert ticket["category_code"] == "network"
     assert ticket["ai_description"]
     assert ticket["priority"] == "medium"
+    assert ticket["sla_status"] == "on_track"
+    assert ticket["recommended_engineer"]["name"] == "Иван Сетевой"
+    assert ticket["knowledge_articles"][0]["code"] == "network"
 
     # 1. Скриншот сохраняется в БД и отдаётся обратно.
     upload = client.post(
@@ -265,3 +270,31 @@ def test_websocket_live_transcript(client: TestClient) -> None:
     detail = client.get(f"/api/calls/{call_id}")
     assert detail.status_code == 200
     assert detail.json()["transcript_text"] == "Проверка live-субтитров"
+
+
+
+def test_ticket_access_and_assignment(client: TestClient):
+    with TestClient(app) as requester:
+        assert requester.get("/api/tickets").status_code == 401
+        assert requester.post("/api/users/login", json={"phone": "+79994567890", "password": "demo-password"}).status_code == 200
+        mine = requester.post("/api/tickets", json={"description": "Не работает интернет"}).json()
+        other = client.post("/api/tickets", json={"description": "Принтер не печатает"}).json()
+        path = f"/api/tickets/{mine['id']}"
+        assert requester.get(f"/api/tickets/{other['id']}").status_code == 404
+        foreign_call = client.post("/api/calls", json={}).json()
+        assert requester.get(f"/api/calls/{foreign_call['id']}").status_code == 404
+        with pytest.raises(WebSocketDisconnect) as denied:
+            with requester.websocket_connect(f"/api/calls/{foreign_call['id']}/signal"):
+                pytest.fail("A requester opened a call owned by someone else")
+        assert denied.value.code == 4404
+        assert requester.patch(path, json={"priority": "critical"}).status_code == 403
+        assert requester.get("/api/users").status_code == 403
+        engineers = client.get("/api/users", params={"role": "engineer"}).json()
+        engineer = engineers[0]
+        assert client.post(path + "/assign", json={"engineer_id": engineer["engineer_id"]}).status_code == 200
+        assert client.patch(path, json={"status": "in_progress"}).status_code == 200
+        assert requester.post("/api/users/logout").status_code == 204
+        assert requester.get(path).status_code == 401
+        assert requester.post("/api/users/login", json={"phone": engineer["phone"], "password": "demo-password"}).status_code == 200
+        assert requester.get(path).status_code == 200
+        assert requester.patch(path, json={"status": "closed"}).status_code == 200

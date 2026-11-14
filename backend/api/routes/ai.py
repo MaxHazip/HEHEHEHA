@@ -21,7 +21,9 @@ from backend.services.ai_service import (
     latest_analysis,
 )
 
-router = APIRouter(prefix="/api/ai", tags=["ai"])
+from backend.api.access import protect_resources
+
+router = APIRouter(prefix="/api/ai", tags=["ai"], dependencies=[Depends(protect_resources)])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 

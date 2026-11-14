@@ -107,7 +107,17 @@ class MessageCreate(BaseModel):
     attachment_ids: list[int] = Field(default_factory=list)
 
 
+class ArticleRead(BaseModel):
+    code: str
+    title: str
+    body: str
+
+
 class TicketSummary(BaseModel):
+    recommended_engineer: UserRead | None = None
+    sla_deadline: datetime
+    sla_status: str
+    knowledge_articles: list[ArticleRead] = Field(default_factory=list)
     id: int
     title: str
     description: str

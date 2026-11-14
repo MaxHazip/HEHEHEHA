@@ -1,3 +1,6 @@
+import { useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { api } from '@/lib/api'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import AppLayout from '@/layouts/AppLayout'
@@ -11,6 +14,26 @@ import DispatcherCallsPage from '@/pages/DispatcherCallsPage'
 
 export default function AppRouter() {
   const role = useAuthStore((s) => s.role)
+
+  const queryClient = useQueryClient()
+  useEffect(() => {
+    if (!role) queryClient.clear()
+    const interceptor = api.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401 && !error.config?.url?.startsWith('/api/users/')) {
+          useAuthStore.setState({ role: null, user: null })
+        }
+        return Promise.reject(error)
+      },
+    )
+    if (role) {
+      void api.get('/api/users/me').catch((error) => {
+        if (error.response?.status === 401) useAuthStore.setState({ role: null, user: null })
+      })
+    }
+    return () => api.interceptors.response.eject(interceptor)
+  }, [queryClient, role])
 
   if (!role) {
     return <Routes><Route path="*" element={<LoginPage />} /></Routes>

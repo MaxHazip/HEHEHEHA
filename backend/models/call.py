@@ -29,6 +29,10 @@ class Call(Base):
 
     __tablename__ = "calls"
 
+    created_by: Mapped[int | None] = mapped_column(
+        big_int(), ForeignKey("users.id", name="fk_calls_created_by", ondelete="SET NULL")
+    )
+
     id: Mapped[int] = mapped_column(big_int(), primary_key=True, autoincrement=True)
 
     ticket_id: Mapped[int | None] = mapped_column(

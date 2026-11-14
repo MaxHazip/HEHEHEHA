@@ -12,7 +12,9 @@ from backend.models import TicketAttachment
 from backend.schemas.ticket_schemas import AttachmentRead
 from backend.services.storage import file_response
 
-router = APIRouter(prefix="/api/attachments", tags=["attachments"])
+from backend.api.access import protect_resources
+
+router = APIRouter(prefix="/api/attachments", tags=["attachments"], dependencies=[Depends(protect_resources)])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 

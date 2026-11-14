@@ -67,6 +67,13 @@ export default function EngineerPage() {
                 <div>
                   <h3 className="text-lg font-semibold text-slate-800 mb-1">{ticket.title}</h3>
                   <p className="text-slate-600 text-sm">{ticket.aiDescription}</p>
+                  {ticket.knowledgeArticles?.map((article) => (
+                    <details key={article.code} className="mt-2 text-sm">
+                      <summary className="cursor-pointer text-blue-700">{article.title}</summary>
+                      <p className="mt-1 text-slate-600">{article.body}</p>
+                    </details>
+                  ))}
+
                 </div>
 
                 {/* Решение от ИИ */}

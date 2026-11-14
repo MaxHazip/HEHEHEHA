@@ -12,14 +12,17 @@ from backend.models import (
     Category,
     ChatMessage,
     Engineer,
+    KnowledgeArticle,
     Subcategory,
     Ticket,
     TicketAnalysis,
     TicketAttachment,
+    TicketKBArticle,
     User,
 )
 from backend.schemas.call_schemas import CallDetail, CallRead
 from backend.schemas.ticket_schemas import (
+    ArticleRead,
     AttachmentRead,
     CallSummary,
     MessageRead,
@@ -32,6 +35,8 @@ from backend.services.ai_service import (
     latest_analysis,
     render_summary,
 )
+
+from backend.services.triage import sla
 
 _SOURCE_BY_CHANNEL = {"chat": "chat", "voice": "phone", "image": "chat"}
 
@@ -216,7 +221,24 @@ async def build_ticket_summary(
         else None
     )
 
+    deadline, sla_status = sla(ticket)
+    articles = await session.scalars(
+        select(KnowledgeArticle).join(TicketKBArticle)
+        .where(TicketKBArticle.ticket_id == ticket.id)
+        .order_by(TicketKBArticle.relevance_score.desc(), KnowledgeArticle.id)
+        .limit(5)
+    )
+    recommended = None
+    if ticket.recommended_engineer_id is not None:
+        profile = await session.get(Engineer, ticket.recommended_engineer_id)
+        if profile is not None:
+            recommended = user_read(await session.get(User, profile.user_id), engineer_id=profile.id)
+
     return TicketSummary(
+        recommended_engineer=recommended,
+        sla_deadline=deadline,
+        sla_status=sla_status,
+        knowledge_articles=[ArticleRead(code=a.code, title=a.title, body=a.body) for a in articles],
         id=ticket.id,
         title=_title(ticket, category, subcategory),
         description=description,

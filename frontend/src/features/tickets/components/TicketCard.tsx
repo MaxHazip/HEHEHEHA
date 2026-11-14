@@ -136,6 +136,21 @@ export default function TicketCard({ ticket }: { ticket: Ticket }) {
         )}
       </div>
 
+      {awaitingReview && ticket.recommendedEngineer && (
+        <button type="button" className="text-sm text-blue-700 text-left"
+          onClick={() => {
+            if (ticket.recommendedEngineer) assignEngineer({ ticketId: ticket.id, engineer: ticket.recommendedEngineer })
+          }}>
+          Назначить рекомендованного инженера: {ticket.recommendedEngineer.name}
+        </button>
+      )}
+      {ticket.slaDeadline && ticket.slaStatus !== 'complete' && (
+        <p className="text-xs text-slate-600">
+          SLA до {new Date(ticket.slaDeadline).toLocaleString('ru-RU')}
+          {ticket.slaStatus === 'at_risk' && ' · Риск просрочки'}
+          {ticket.slaStatus === 'overdue' && ' · Просрочена'}
+        </p>
+      )}
       {awaitingReview && (
         <button
           onClick={() => approveTicket(ticket.id)}

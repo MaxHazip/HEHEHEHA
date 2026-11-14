@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_module.core.taxonomy import TAXONOMY
+from backend.services.triage import seed_articles
 from backend.core.settings import settings
 from backend.models import Category, Engineer, Subcategory, User
 from backend.services.accounts import hash_password
@@ -115,6 +116,7 @@ async def seed_reference_data(session: AsyncSession) -> None:
 async def seed_demo_data(session: AsyncSession) -> None:
     # Справочники нужны всегда: на них ссылаются заявки и ИИ.
     await seed_reference_data(session)
+    await seed_articles(session)
 
     if not settings.SEED_DEMO_DATA:
         return

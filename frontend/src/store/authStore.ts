@@ -1,3 +1,4 @@
+import { api } from '@/lib/api'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
@@ -24,8 +25,11 @@ export const useAuthStore = create<AuthState>()(
       role: null,
       user: null,
       login: (user) => set({ role: user.role, user }),
-      logout: () => set({ role: null, user: null }),
+      logout: () => {
+        void api.post('/api/users/logout').catch(() => undefined)
+        set({ role: null, user: null })
+      },
     }),
-    { name: 'dispatchai-auth-v2' }
+    { name: 'dispatchai-auth-v3' }
   )
 )

@@ -18,4 +18,8 @@ export interface Ticket {
   priority: TicketPriority
   assignee: Engineer | null
   createdAt: string
+  recommendedEngineer?: Engineer | null
+  slaDeadline?: string
+  slaStatus?: string
+  knowledgeArticles?: { code: string; title: string; body: string }[]
 }

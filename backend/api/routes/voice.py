@@ -4,7 +4,7 @@ import base64
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import Depends, APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from ai_module.providers.speech_provider import (
@@ -34,7 +34,9 @@ from backend.services.storage import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/voice", tags=["voice"])
+from backend.api.access import protect_resources
+
+router = APIRouter(prefix="/api/voice", tags=["voice"], dependencies=[Depends(protect_resources)])
 
 
 def _reply_for(analysis) -> str:

@@ -13,6 +13,7 @@ export default function AdminDashboardPage() {
   const metrics = [
     ['Загружено заявок', tickets.length],
     ['Ожидают проверки', tickets.filter((t) => t.status === 'draft' || t.status === 'new').length],
+    ['Риск SLA или просрочка', tickets.filter((t) => t.slaStatus === 'at_risk' || t.slaStatus === 'overdue').length],
     ['В работе', tickets.filter((t) => t.status === 'in_progress').length],
     ['Решены или закрыты', tickets.filter((t) => t.status === 'resolved' || t.status === 'closed').length],
   ] as const

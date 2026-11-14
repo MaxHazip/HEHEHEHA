@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import (
@@ -19,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
 from ai_module.core.schemas import TicketAIResult
+from backend.api.access import CurrentUser, STAFF, engineer_id, protect_resources, require_staff
 from backend.api.serializers import (
     attachment_read,
     build_ticket_detail,
@@ -52,7 +54,6 @@ from backend.schemas.ticket_schemas import (
     TicketUpdate,
     normalize_role,
 )
-from backend.services.accounts import get_or_create_requester
 from backend.services.ai_service import analyze_ticket
 from backend.services.storage import (
     UploadTooLargeError,
@@ -62,7 +63,7 @@ from backend.services.storage import (
     safe_filename,
 )
 
-router = APIRouter(prefix="/api/tickets", tags=["tickets"])
+router = APIRouter(prefix="/api/tickets", tags=["tickets"], dependencies=[Depends(protect_resources)])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,7 @@ async def _session_messages(
 async def create_ticket(
     payload: TicketCreate,
     session: SessionDep,
+    user: CurrentUser,
 ) -> TicketDetail:
     text = (payload.description or payload.title or "").strip()
     if not text:
@@ -104,7 +106,7 @@ async def create_ticket(
             detail="Нужен заголовок или описание обращения",
         )
 
-    requester = await get_or_create_requester(session)
+    requester = user
 
     chat_session = ChatSession(user_id=requester.id, status="active")
     session.add(chat_session)
@@ -131,13 +133,16 @@ async def create_ticket(
     await session.refresh(ticket)
 
     if settings.AI_AUTO_ANALYZE:
+        ticket_id = ticket.id
         try:
             await analyze_ticket(session, ticket, force=True)
         except Exception:  # noqa: BLE001
             # Заявка уже создана; сбой ИИ не должен ломать приём обращения.
             logger.exception(
-                "Автоматический ИИ-анализ не удался для заявки %s", ticket.id
+                "Автоматический ИИ-анализ не удался для заявки %s", ticket_id
             )
+            await session.rollback()
+            await session.refresh(ticket)
 
     return await build_ticket_detail(session, ticket)
 
@@ -149,13 +154,23 @@ async def create_ticket(
 )
 async def list_tickets(
     session: SessionDep,
+    user: CurrentUser,
     status_filter: str | None = Query(default=None, alias="status"),
     priority: str | None = None,
     assignee_id: int | None = None,
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ) -> list[TicketSummary]:
     stmt = select(Ticket)
+    if user.role == "requester":
+        stmt = stmt.where(Ticket.created_by == user.id)
+    elif user.role == "engineer":
+        profile = await engineer_id(session, user)
+        if profile is None:
+            return []
+        stmt = stmt.where(Ticket.engineer_id == profile)
+    elif user.role not in STAFF:
+        return []
 
     if status_filter:
         stmt = stmt.where(Ticket.status == status_filter)
@@ -195,9 +210,21 @@ async def update_ticket(
     ticket_id: int,
     payload: TicketUpdate,
     session: SessionDep,
+    user: CurrentUser,
 ) -> TicketDetail:
     ticket = await get_ticket_or_404(session, ticket_id)
     data = payload.model_dump(exclude_unset=True)
+    if user.role not in STAFF:
+        complete = data in ({"status": "closed"}, {"status": "resolved"})
+        refuse = data == {"status": "new", "engineer_id": None}
+        if user.role != "engineer" or ticket.status != "in_progress" or not (complete or refuse):
+            require_staff(user)
+    elif data.get("status") == "in_progress":
+        if data.get("engineer_id", ticket.engineer_id) is None:
+            raise HTTPException(status_code=422, detail="Сначала назначьте инженера")
+        ticket.confirmed_by = user.id
+        ticket.confirmed_at = datetime.now(timezone.utc)
+        data["needs_human_review"] = False
 
     if data.get("engineer_id") is not None:
         engineer = await session.get(Engineer, data["engineer_id"])
@@ -231,7 +258,7 @@ async def update_ticket(
         old_value = getattr(ticket, field)
         if old_value != value:
             session.add(TicketEvent(
-                ticket_id=ticket.id, action="updated", field=field,
+                ticket_id=ticket.id, actor_id=user.id, action="updated", field=field,
                 old_value=old_value, new_value=value,
             ))
             setattr(ticket, field, value)
@@ -250,14 +277,16 @@ async def assign_ticket(
     ticket_id: int,
     payload: TicketAssign,
     session: SessionDep,
+    user: CurrentUser,
 ) -> TicketDetail:
     ticket = await get_ticket_or_404(session, ticket_id)
+    require_staff(user)
     engineer = await session.get(Engineer, payload.engineer_id)
     if engineer is None:
         raise HTTPException(status_code=404, detail="Инженер не найден")
     if ticket.engineer_id != engineer.id:
         session.add(TicketEvent(
-            ticket_id=ticket.id, action="assigned", field="engineer_id",
+            ticket_id=ticket.id, actor_id=user.id, action="assigned", field="engineer_id",
             old_value=ticket.engineer_id, new_value=engineer.id,
         ))
         ticket.engineer_id = engineer.id
@@ -308,6 +337,7 @@ async def add_message(
     ticket_id: int,
     payload: MessageCreate,
     session: SessionDep,
+    user: CurrentUser,
     analyze: bool = False,
 ) -> MessageRead:
     ticket = await get_ticket_or_404(session, ticket_id)
@@ -318,7 +348,7 @@ async def add_message(
 
     message = ChatMessage(
         session_id=ticket.chat_session_id,
-        role=normalize_role(payload.role),
+        role="user" if user.role == "requester" else normalize_role(payload.role),
         # content не может быть пустым: для сообщения-только-с-файлом
         # подставляем служебную подпись.
         content=text or "[вложение]",
@@ -358,8 +388,14 @@ async def add_message(
             await analyze_ticket(session, ticket, force=True)
         except Exception:  # noqa: BLE001
             logger.exception(
-                "ИИ-анализ после сообщения не удался для заявки %s", ticket.id
+                "ИИ-анализ после сообщения не удался для заявки %s", ticket_id
             )
+            await session.rollback()
+            await session.refresh(message)
+            for attachment in attachments:
+                await session.refresh(attachment, attribute_names=[
+                    column.key for column in TicketAttachment.__table__.columns if column.key != "data"
+                ])
 
     return message_read(
         message, ticket.id, [attachment_read(item) for item in attachments]

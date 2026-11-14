@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     # Необязателен: если не задан, используется DATABASE_URL.
     ALEMBIC_DATABASE_URL: str | None = None
 
+    SESSION_SECRET: str | None = None
+    SESSION_COOKIE_SECURE: bool = False
     APP_NAME: str = "DispatchAI"
     APP_VERSION: str = "0.1.0"
 

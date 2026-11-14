@@ -26,7 +26,7 @@ from ai_module.core.schemas import TicketAIResult
 from backend.api.serializers import call_read, call_summary
 from backend.core.database import create_session_maker, get_session
 from backend.core.settings import settings
-from backend.models import Call, Ticket
+from backend.models import Call
 from backend.schemas.call_schemas import (
     CallCreate,
     CallDetail,
@@ -52,6 +52,8 @@ from backend.services.transcription import (
     transcribe_and_store,
 )
 
+from backend.api.access import COOKIE, CurrentUser, STAFF, allowed_origin, authenticated_user, can_read_call, protect_resources, require_staff, require_ticket
+
 router = APIRouter(prefix="/api/calls", tags=["calls"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
@@ -67,18 +69,23 @@ async def get_call_or_404(session: AsyncSession, call_id: int) -> Call:
 
 @router.get(
     "",
+    dependencies=[Depends(protect_resources)],
     response_model=list[CallSummary],
     summary="Список звонков",
 )
 async def list_calls(
     session: SessionDep,
+    user: CurrentUser,
     status_filter: str | None = Query(default=None, alias="status"),
     ticket_id: int | None = None,
     phone: str | None = None,
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ) -> list[CallSummary]:
     stmt = select(Call).options(defer(Call.recording_data))
+
+    if user.role not in STAFF:
+        stmt = stmt.where(Call.created_by == user.id)
 
     if status_filter:
         stmt = stmt.where(Call.status == status_filter)
@@ -98,24 +105,26 @@ async def list_calls(
 
 @router.post(
     "",
+    dependencies=[Depends(protect_resources)],
     response_model=CallRead,
     status_code=status.HTTP_201_CREATED,
     summary="Создать сессию звонка",
 )
 async def create_call(
-    payload: CallCreate, session: SessionDep
+    payload: CallCreate, session: SessionDep, user: CurrentUser
 ) -> CallRead:
     if payload.ticket_id is not None:
-        ticket = await session.get(Ticket, payload.ticket_id)
-        if ticket is None:
-            raise HTTPException(status_code=404, detail="Заявка не найдена")
+        await require_ticket(session, user, payload.ticket_id)
+    if payload.transport != "webrtc":
+        require_staff(user)
 
     call = Call(
+        created_by=user.id,
         ticket_id=payload.ticket_id,
         direction=payload.direction,
         transport=payload.transport,
         provider=payload.provider,
-        client_phone=payload.client_phone,
+        client_phone=user.phone if user.role == "requester" else payload.client_phone,
         status=payload.status,
         started_at=datetime.now(timezone.utc),
     )
@@ -127,6 +136,7 @@ async def create_call(
 
 @router.get(
     "/{call_id}",
+    dependencies=[Depends(protect_resources)],
     response_model=CallDetail,
     summary="Звонок с расшифровкой",
 )
@@ -137,6 +147,7 @@ async def read_call(call_id: int, session: SessionDep) -> CallDetail:
 
 @router.patch(
     "/{call_id}",
+    dependencies=[Depends(protect_resources)],
     response_model=CallRead,
     summary="Обновить статус звонка",
 )
@@ -147,6 +158,9 @@ async def update_call(
 ) -> CallRead:
     call = await get_call_or_404(session, call_id)
     data = payload.model_dump(exclude_unset=True)
+
+    if "status" in data and data["status"] is None:
+        raise HTTPException(status_code=422, detail="Статус не может быть null")
 
     for field, value in data.items():
         setattr(call, field, value)
@@ -188,6 +202,7 @@ async def update_call(
 
 @router.post(
     "/{call_id}/recording",
+    dependencies=[Depends(protect_resources)],
     response_model=CallRead,
     summary="Загрузить запись звонка (хранится в БД)",
 )
@@ -227,6 +242,7 @@ async def upload_recording(
 
 @router.get(
     "/{call_id}/recording",
+    dependencies=[Depends(protect_resources)],
     summary="Прослушать/скачать запись звонка",
 )
 async def download_recording(
@@ -259,6 +275,7 @@ async def download_recording(
 
 @router.put(
     "/{call_id}/transcript",
+    dependencies=[Depends(protect_resources)],
     response_model=CallDetail,
     summary="Сохранить расшифровку звонка",
 )
@@ -287,6 +304,7 @@ async def save_transcript(
 
 @router.post(
     "/{call_id}/transcribe",
+    dependencies=[Depends(protect_resources)],
     response_model=CallDetail,
     summary="Распознать запись на сервере (T-one / Whisper / Google)",
 )
@@ -314,6 +332,7 @@ async def transcribe_recording(
 
 @router.post(
     "/{call_id}/analyze",
+    dependencies=[Depends(protect_resources)],
     response_model=TicketAIResult,
     summary="Проанализировать звонок и обновить заявку",
 )
@@ -326,6 +345,7 @@ async def analyze_call(
 
 @router.get(
     "/{call_id}/transcript",
+    dependencies=[Depends(protect_resources)],
     response_model=CallDetail,
     summary="Расшифровка звонка",
 )
@@ -340,12 +360,21 @@ async def read_transcript(
 async def signal_call(websocket: WebSocket, call_id: int) -> None:
     """WebRTC-сигналинг: обмен offer/answer/ICE и live-расшифровкой."""
 
-    role = websocket.query_params.get("role", "client")
+    origin = websocket.headers.get("origin")
+    if origin and not allowed_origin(origin, websocket.headers.get("host", "")):
+        await websocket.close(code=4403)
+        return
     peer_id = websocket.query_params.get("peer_id")
 
     async with create_session_maker() as session:
+        try:
+            user = await authenticated_user(session, websocket.cookies.get(COOKIE))
+        except HTTPException:
+            await websocket.close(code=4401)
+            return
+        role = "dispatcher" if user.role in STAFF else "client"
         call = await session.get(Call, call_id)
-        if call is None:
+        if call is None or not await can_read_call(session, user, call):
             await websocket.close(code=4404)
             return
 

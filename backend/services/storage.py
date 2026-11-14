@@ -85,14 +85,22 @@ def file_response(
 ) -> Response:
     """Отдаёт файл с поддержкой Range (нужно для перемотки аудио)."""
 
+    mime_type = mime_type.partition(";")[0].strip().lower()
+    inline = mime_type in {"image/png", "image/jpeg", "image/gif", "image/webp"} or mime_type.startswith("audio/")
+    disposition = content_disposition(filename)
+    if not inline:
+        disposition = disposition.replace("inline;", "attachment;", 1)
+        mime_type = "application/octet-stream"
     headers = {
         "Accept-Ranges": "bytes",
-        "Content-Disposition": content_disposition(filename),
+        "Content-Disposition": disposition,
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
     }
 
     range_header = request.headers.get("range")
     if range_header:
-        match = re.match(r"bytes=(\d*)-(\d*)", range_header)
+        match = re.fullmatch(r"bytes=([0-9]{0,19})-([0-9]{0,19})", range_header)
         if match:
             start_text, end_text = match.groups()
             total = len(data)

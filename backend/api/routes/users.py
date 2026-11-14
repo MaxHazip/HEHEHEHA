@@ -1,20 +1,22 @@
 """Пользователи: инженеры для назначения на заявки."""
 
+import re
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from pydantic import BaseModel, Field
 from pwdlib import PasswordHash
 
-from backend.services.accounts import get_user_by_phone
-import re
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.access import COOKIE, SESSION_SECONDS, CurrentUser, allowed_origin, issue_session, require_staff
+from backend.core.settings import settings
 from backend.api.serializers import user_read
 from backend.core.database import get_session
 from backend.models import Engineer, User
 from backend.schemas.ticket_schemas import UserRead
+from backend.services.accounts import get_user_by_phone
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -23,8 +25,10 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 @router.get("", response_model=list[UserRead], summary="Список пользователей")
 async def list_users(
     session: SessionDep,
+    user: CurrentUser,
     role: str | None = None,
 ) -> list[UserRead]:
+    require_staff(user)
     stmt = select(User).where(User.is_active.is_(True))
     if role:
         stmt = stmt.where(User.role == role)
@@ -56,7 +60,10 @@ class LoginRequest(BaseModel):
 
 
 @router.post("/login", response_model=UserRead)
-async def login(payload: LoginRequest, session: SessionDep) -> UserRead:
+async def login(payload: LoginRequest, session: SessionDep, request: Request, response: Response) -> UserRead:
+    origin = request.headers.get("origin")
+    if origin and not allowed_origin(origin, request.headers.get("host", "")):
+        raise HTTPException(status_code=403, detail="Недопустимый источник запроса")
     digits = re.sub(r"[^0-9]", "", payload.phone)
     if len(digits) == 10:
         digits = "7" + digits
@@ -68,4 +75,19 @@ async def login(payload: LoginRequest, session: SessionDep) -> UserRead:
     ):
         raise HTTPException(status_code=401, detail="Неверный телефон или пароль")
     engineer_id = await session.scalar(select(Engineer.id).where(Engineer.user_id == user.id))
+    response.set_cookie(
+        COOKIE, issue_session(user), max_age=SESSION_SECONDS, httponly=True,
+        secure=settings.SESSION_COOKIE_SECURE, samesite="strict",
+    )
     return user_read(user, engineer_id=engineer_id)
+
+
+@router.post("/logout", status_code=204)
+async def logout(response: Response, _user: CurrentUser) -> None:
+    response.delete_cookie(COOKIE)
+
+
+@router.get("/me", response_model=UserRead)
+async def me(session: SessionDep, user: CurrentUser) -> UserRead:
+    profile = await session.scalar(select(Engineer.id).where(Engineer.user_id == user.id))
+    return user_read(user, engineer_id=profile)

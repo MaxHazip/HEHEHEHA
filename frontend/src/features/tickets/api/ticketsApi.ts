@@ -19,6 +19,10 @@ interface TicketRead {
   priority: Ticket['priority']
   assignee: UserRead | null
   created_at: string
+  recommended_engineer: UserRead | null
+  sla_deadline: string
+  sla_status: string
+  knowledge_articles: Ticket['knowledgeArticles']
 }
 
 function engineerProfile(user: UserRead): Engineer | null {
@@ -43,6 +47,10 @@ export const ticketsApi = {
       priority: ticket.priority,
       assignee: ticket.assignee ? engineerProfile(ticket.assignee) : null,
       createdAt: ticket.created_at,
+      recommendedEngineer: ticket.recommended_engineer ? engineerProfile(ticket.recommended_engineer) : null,
+      slaDeadline: ticket.sla_deadline,
+      slaStatus: ticket.sla_status,
+      knowledgeArticles: ticket.knowledge_articles,
     }))
   },
   async getEngineers(): Promise<Engineer[]> {
