@@ -21,31 +21,31 @@ logger = logging.getLogger(__name__)
 DEMO_USERS: list[dict] = [
     {
         "name": "Иван Диспетчеров",
-        "email": "dispatcher@dispatch.local",
+        "email": "+7(999)123-45-67",
         "role": "dispatcher",
         "competencies": [],
     },
     {
         "name": "Иван Сетевой",
-        "email": "network@dispatch.local",
+        "phone": "+7(321)321-12-12",
         "role": "engineer",
         "competencies": ["network", "wifi", "vpn"],
     },
     {
         "name": "Петр Железнов",
-        "email": "hardware@dispatch.local",
+        "email": "+7(999)234-56-78",
         "role": "engineer",
         "competencies": ["hardware", "printer", "power"],
     },
     {
         "name": "Анна Программистова",
-        "email": "software@dispatch.local",
+        "email": "+7(999)345-67-89",
         "role": "engineer",
         "competencies": ["software", "access", "mail"],
     },
     {
         "name": "Заявитель",
-        "email": "requester@dispatch.local",
+        "email": "+7(999)456-78-90",
         "role": "requester",
         "competencies": [],
     },

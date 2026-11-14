@@ -23,11 +23,11 @@ def hash_password(password: str) -> str:
     return PasswordHash.recommended().hash(password)
 
 
-async def get_user_by_email(
-    session: AsyncSession, email: str
+async def get_user_by_phone(
+    session: AsyncSession, phone: str
 ) -> User | None:
     return await session.scalar(
-        select(User).where(func.lower(User.email) == email.strip().lower())
+        select(User).where(func.lower(User.email) == phone.strip())
     )
 
 
@@ -39,7 +39,7 @@ async def get_or_create_user(
     role: str,
     password: str = DEMO_PASSWORD,
 ) -> User:
-    user = await get_user_by_email(session, email)
+    user = await get_user_by_phone(session, email)
     if user is not None:
         return user
 

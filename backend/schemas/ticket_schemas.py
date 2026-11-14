@@ -23,12 +23,11 @@ class UserRead(BaseModel):
     id: int
     name: str
     role: str
-    email: str
     # Первая компетенция инженера — для обратной совместимости UI.
     specialty: str | None = None
     # id профиля Engineer (нужен для POST /api/tickets/{id}/assign).
     engineer_id: int | None = None
-    phone: str | None = None
+    phone: str
 
     model_config = ConfigDict(from_attributes=True)
 
