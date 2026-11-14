@@ -1,39 +1,30 @@
+"""Совместимая обёртка над новым анализатором.
 
-from core.schemas import TicketAnalysis
-from core.prompts import SYSTEM_PROMPT
+Раньше здесь планировалась отдельная функция ``analyze_ticket``.
+Теперь вся логика живёт в ``ai_module.core.analyzer``, а этот модуль
+оставлен для простых вызовов из скриптов и тестов.
+"""
 
+import asyncio
 
-def call_llm(user_text: str) -> dict:
-    """
-    ЗЗаглушка пока что.
-
-    Здесь будет подключение языковой модели.
-    Она должна возвращать обычный Python dict,
-    соответствующий TicketAnalysis.
-
-    Позже подключим OpenAI API, другой совместимый
-    API или локальную модель через Ollama.
-    """
-
-    raise NotImplementedError(
-        "Подключение LLM пока не настроено"
-    )
+from ai_module.core.analyzer import get_analyzer
+from ai_module.core.schemas import AnalysisRequest, Message
+from ai_module.core.taxonomy import TAXONOMY_VERSION, get_taxonomy
 
 
 def analyze_ticket(user_text: str) -> dict:
-    """
-    Главная функция анализа обращения.
-
-    Вход: текст пользователя.
-    Выход: структурированный JSON в виде dict.
-    """
+    """Анализирует один текст и возвращает JSON-совместимый dict."""
 
     if not user_text or not user_text.strip():
         raise ValueError("Текст обращения пустой")
 
-    raw_result = call_llm(user_text)
+    request = AnalysisRequest(
+        ticket_id="legacy",
+        source="chat",
+        messages=[Message(role="client", text=user_text)],
+        taxonomy_version=TAXONOMY_VERSION,
+        taxonomy=get_taxonomy(),
+    )
 
-    # Проверяем структуру ответа
-    analysis = TicketAnalysis.model_validate(raw_result)
-
-    return analysis.model_dump(mode="json")
+    result = asyncio.run(get_analyzer().analyze(request))
+    return result.model_dump(mode="json")

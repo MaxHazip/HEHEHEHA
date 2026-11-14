@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { BookOpen, Inbox, LayoutDashboard, Wrench, Ticket, Users } from 'lucide-react'
+import { BookOpen, Inbox, LayoutDashboard, Phone, Wrench, Users } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 
 export default function Sidebar() {
@@ -9,6 +9,7 @@ export default function Sidebar() {
   const dispatcherMenu = [
     { to: '/dashboard', label: 'Главная', icon: LayoutDashboard },
     { to: '/tickets', label: 'Входящие заявки', icon: Inbox },
+    { to: '/calls', label: 'Звонки', icon: Phone },
     { to: '/employees', label: 'Исполнители', icon: Users },
     { to: '/knowledge', label: 'База знаний', icon: BookOpen },
   ]

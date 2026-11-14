@@ -1,6 +1,6 @@
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
+  PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts'
 import { Bot, AlertTriangle, TrendingUp, CheckCircle, Activity } from 'lucide-react'
 
@@ -103,7 +103,7 @@ export default function AdminDashboardPage() {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={DATA_CATEGORIES} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                  {DATA_CATEGORIES.map((entry, index) => (
+                  {DATA_CATEGORIES.map((_entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>

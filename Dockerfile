@@ -8,11 +8,12 @@ RUN useradd -m appuser
 WORKDIR /app
 
 COPY pyproject.toml poetry.lock ./
-RUN pip install poetry && poetry config virtualenvs.create false && poetry install --no-interaction --no-ansi --no-root
-
+RUN pip install --no-cache-dir poetry \
+    && poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi --no-root
 
 COPY . .
 
 USER appuser
 
-CMD ["python", "run", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
