@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAuthStore, type Role } from '@/store/authStore'
-import { Ticket, User, Wrench, ArrowLeft } from 'lucide-react'
+import { Ticket, User, Wrench, ArrowLeft, BarChart3 } from 'lucide-react'
 
 export default function LoginPage() {
   const login = useAuthStore((s) => s.login)
@@ -13,14 +13,9 @@ export default function LoginPage() {
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault()
     if (!name || !phone || !password) return alert('Заполните все поля')
-    
-    // Имитация отправки на бэкенд
-    console.log('Данные для отправки:', { name, phone, password, role: selectedRole })
-    
     login({ name, phone, role: selectedRole })
   }
 
-  // ЭКРАН 1: Выбор роли (здесь три кнопки)
   if (!selectedRole) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
@@ -29,14 +24,18 @@ export default function LoginPage() {
           <p className="text-slate-500 mb-8">Выберите роль для входа</p>
 
           <div className="space-y-4">
-            <button onClick={() => setSelectedRole('client')} className="w-full flex items-center justify-center gap-3 bg-emerald-600 text-white py-4 rounded-xl font-medium hover:bg-emerald-700 transition">
+            <button onClick={() => setSelectedRole('client')} className="w-full flex items-center justify-center gap-3 bg-emerald-600 text-white py-3 rounded-xl font-medium hover:bg-emerald-700 transition">
               <User size={20} /> Войти как Клиент
             </button>
-            <button onClick={() => setSelectedRole('dispatcher')} className="w-full flex items-center justify-center gap-3 bg-blue-600 text-white py-4 rounded-xl font-medium hover:bg-blue-700 transition">
+            <button onClick={() => setSelectedRole('dispatcher')} className="w-full flex items-center justify-center gap-3 bg-blue-600 text-white py-3 rounded-xl font-medium hover:bg-blue-700 transition">
               <Ticket size={20} /> Войти как Диспетчер
             </button>
-            <button onClick={() => setSelectedRole('engineer')} className="w-full flex items-center justify-center gap-3 bg-slate-800 text-white py-4 rounded-xl font-medium hover:bg-slate-900 transition">
+            <button onClick={() => setSelectedRole('engineer')} className="w-full flex items-center justify-center gap-3 bg-slate-800 text-white py-3 rounded-xl font-medium hover:bg-slate-900 transition">
               <Wrench size={20} /> Войти как Инженер
+            </button>
+            {/* Новая кнопка Админа */}
+            <button onClick={() => setSelectedRole('admin')} className="w-full flex items-center justify-center gap-3 bg-purple-600 text-white py-3 rounded-xl font-medium hover:bg-purple-700 transition">
+              <BarChart3 size={20} /> Войти как Админ (Аналитика)
             </button>
           </div>
         </div>
@@ -44,7 +43,6 @@ export default function LoginPage() {
     )
   }
 
-  // ЭКРАН 2: Форма регистрации
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-100">
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full">

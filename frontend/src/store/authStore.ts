@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-// Здесь обязательно должна быть роль 'engineer'
-export type Role = 'client' | 'dispatcher' | 'engineer' | null
+// Добавили роль 'admin'
+export type Role = 'client' | 'dispatcher' | 'engineer' | 'admin' | null
 
 export interface UserProfile {
   name: string
