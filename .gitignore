@@ -3,3 +3,4 @@
 __pycache__
 dispatcher.db
 *.pyc
+node_modules
