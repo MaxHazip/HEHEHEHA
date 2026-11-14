@@ -72,5 +72,12 @@ export const ticketsApi = {
     await delay(300)
     const tickets = getDB()
     saveDB(tickets.map(t => t.id === ticketId ? { ...t, status: 'new', assignee: null } : t))
+  },
+
+  // НОВОЕ: Обновление текста ИИ
+  updateAiDescription: async (ticketId: number, newDescription: string): Promise<void> => {
+    await delay(300)
+    const tickets = getDB()
+    saveDB(tickets.map(t => t.id === ticketId ? { ...t, aiDescription: newDescription } : t))
   }
 }

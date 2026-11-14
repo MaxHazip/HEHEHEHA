@@ -35,11 +35,20 @@ export function useCompleteTicket() {
   })
 }
 
-// НОВЫЙ ХУК: Отказ от задачи
 export function useRefuseTicket() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (ticketId: number) => ticketsApi.refuseTicket(ticketId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tickets'] }),
+  })
+}
+
+// НОВЫЙ ХУК: Редактирование анализа ИИ
+export function useUpdateAiDescription() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ticketId, description }: { ticketId: number, description: string }) => 
+      ticketsApi.updateAiDescription(ticketId, description),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tickets'] }),
   })
 }
