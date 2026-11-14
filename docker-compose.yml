@@ -81,6 +81,8 @@ services:
       ARI_RECORD: ${ARI_RECORD:-true}
       ARI_GREETING_MEDIA: ${ARI_GREETING_MEDIA:-}
       ARI_AUTO_ANALYZE: ${ARI_AUTO_ANALYZE:-true}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
     depends_on:
       db:
         condition: service_healthy
@@ -103,6 +105,16 @@ services:
     volumes:
       - ollama_data:/root/.ollama
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant_vector_db
+    ports:
+      - "6333:6333"  # REST API
+      - "6334:6334"  # gRPC порт
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+
   # Локальный Whisper с OpenAI-совместимым API.
   # Запуск: docker compose --profile whisper up -d
   whisper:
@@ -121,3 +133,5 @@ volumes:
   postgres_data:
   ollama_data:
   whisper_cache:
+  qdrant_storage:
+    driver: local
