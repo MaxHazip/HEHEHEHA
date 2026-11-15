@@ -316,6 +316,20 @@ export default function TicketCard({ ticket }: Props) {
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {ticket.attachments.map((attachment) => {
               const url = apiUrl(attachment.url) ?? ''
+              const isVideo =
+                attachment.kind === 'video' ||
+                attachment.mime_type.startsWith('video/')
+
+              if (isVideo) {
+                return (
+                  <video
+                    key={attachment.id}
+                    controls
+                    src={url}
+                    className="col-span-2 w-full rounded-xl border border-gray-100 bg-black"
+                  />
+                )
+              }
 
               if (attachment.kind === 'image') {
                 return (

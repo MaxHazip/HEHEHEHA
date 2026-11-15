@@ -527,7 +527,7 @@ async def upload_attachment(
     mime_type = guess_mime(filename, file.content_type)
     attachment_kind = (
         kind
-        if kind in ("image", "audio", "document")
+        if kind in ("image", "audio", "video", "document")
         else detect_kind(mime_type, filename)
     )
 

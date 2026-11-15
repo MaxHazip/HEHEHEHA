@@ -45,6 +45,7 @@ class AttachmentsStats(BaseModel):
     total: int = 0
     images: int = 0
     audio: int = 0
+    video: int = 0
     documents: int = 0
 
 

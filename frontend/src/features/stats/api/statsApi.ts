@@ -64,6 +64,7 @@ export interface Stats {
     total: number
     images: number
     audio: number
+    video: number
     documents: number
   }
   knowledge_articles: number

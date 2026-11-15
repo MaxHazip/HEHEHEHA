@@ -20,14 +20,17 @@ _EXTENSION_MIME = {
     ".oga": "audio/ogg",
     ".wav": "audio/wav",
     ".mp3": "audio/mpeg",
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
     ".m4a": "audio/mp4",
-    ".mp4": "audio/mp4",
     ".pdf": "application/pdf",
     ".txt": "text/plain",
     ".log": "text/plain",
 }
 
-_ALLOWED_KINDS = ("image", "audio", "document")
+_ALLOWED_KINDS = ("image", "audio", "video", "document")
 
 
 class UploadTooLargeError(ValueError):
@@ -53,6 +56,8 @@ def guess_mime(filename: str | None, provided: str | None) -> str:
 
 
 def detect_kind(mime_type: str, filename: str | None = None) -> str:
+    if mime_type.startswith("video/"):
+        return "video"
     if mime_type.startswith(IMAGE_MIME_PREFIX):
         return "image"
     if mime_type.startswith(AUDIO_MIME_PREFIX):
@@ -60,7 +65,9 @@ def detect_kind(mime_type: str, filename: str | None = None) -> str:
     suffix = Path(filename or "").suffix.lower()
     if suffix in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
         return "image"
-    if suffix in (".webm", ".ogg", ".oga", ".wav", ".mp3", ".m4a", ".mp4"):
+    if suffix in (".mp4", ".mov", ".avi", ".mkv"):
+        return "video"
+    if suffix in (".webm", ".ogg", ".oga", ".wav", ".mp3", ".m4a"):
         return "audio"
     return "document"
 

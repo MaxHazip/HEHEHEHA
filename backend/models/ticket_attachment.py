@@ -40,7 +40,7 @@ class TicketAttachment(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('image', 'audio', 'document')",
+            "kind IN ('image', 'audio', 'video', 'document')",
             name="ck_ticket_attachments_kind",
         ),
         CheckConstraint(

@@ -257,6 +257,7 @@ async def read_stats(session: SessionDep) -> StatsResponse:
         total=sum(attachment_counts.values()),
         images=attachment_counts.get("image", 0),
         audio=attachment_counts.get("audio", 0),
+        video=attachment_counts.get("video", 0),
         documents=attachment_counts.get("document", 0),
     )
 

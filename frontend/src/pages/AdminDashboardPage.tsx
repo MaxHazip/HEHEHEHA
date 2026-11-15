@@ -266,7 +266,7 @@ export default function AdminDashboardPage() {
         <StatCard
           label="Вложения"
           value={stats.attachments.total}
-          hint={`Фото: ${stats.attachments.images} · аудио: ${stats.attachments.audio}`}
+          hint={`Фото: ${stats.attachments.images} · видео: ${stats.attachments.video} · аудио: ${stats.attachments.audio}`}
           icon={<Paperclip size={17} />}
         />
         <StatCard
