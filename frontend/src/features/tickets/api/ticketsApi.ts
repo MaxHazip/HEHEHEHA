@@ -31,6 +31,26 @@ interface BackendTicket {
     keywords: string[]
     score?: number | null
   }>
+  attachments?: Array<{
+    id: number
+    kind: string
+    filename: string
+    mime_type: string
+    size_bytes: number
+    url: string
+    description?: string | null
+    created_at: string
+  }>
+  calls?: Array<{
+    id: number
+    status: string
+    recording_url: string | null
+    transcript_preview: string | null
+    duration_seconds: number | null
+    started_at: string
+    ended_at: string | null
+    client_phone: string | null
+  }>
   created_at: string
 }
 
@@ -69,6 +89,8 @@ function mapTicket(raw: BackendTicket): Ticket {
     priority: PRIORITY_MAP[raw.priority] ?? 'medium',
     assignee,
     knowledge: raw.knowledge ?? [],
+    attachments: raw.attachments ?? [],
+    calls: raw.calls ?? [],
     createdAt: raw.created_at,
   }
 }

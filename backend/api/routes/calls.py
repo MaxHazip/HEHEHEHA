@@ -1,6 +1,8 @@
 """Звонки: WebRTC-сессии, запись, транскрибация и ИИ-анализ."""
 
+import base64
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Annotated
 
@@ -22,23 +24,32 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
+from ai_module.core.analyzer import get_analyzer
+from ai_module.core.chat import generate_reply
 from ai_module.core.schemas import TicketAIResult
+from ai_module.providers.tts_provider import (
+    TTSProviderError,
+    synthesize_speech,
+)
 from backend.api.serializers import call_read, call_summary
 from backend.core.database import create_session_maker, get_session
 from backend.core.settings import settings
-from backend.models import Call, Ticket
+from backend.models import Call, ChatMessage, Ticket
 from backend.schemas.call_schemas import (
     CallCreate,
     CallDetail,
     CallRead,
     CallUpdate,
+    CallVoiceReply,
     TranscriptUpdate,
 )
 from backend.schemas.ticket_schemas import CallSummary
 from backend.services.call_service import (
     analyze_call_record,
     build_call_detail,
+    ensure_ticket_for_call,
 )
+from backend.services.ai_service import analyze_ticket
 from backend.services.signalling import hub
 from backend.services.storage import (
     UploadTooLargeError,
@@ -54,6 +65,7 @@ from backend.services.transcription import (
 
 
 router = APIRouter(prefix="/api/calls", tags=["calls"])
+logger = logging.getLogger(__name__)
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
@@ -324,6 +336,95 @@ async def analyze_call(
 ) -> TicketAIResult:
     call = await get_call_or_404(session, call_id)
     return await analyze_call_record(session, call)
+
+
+@router.post(
+    "/{call_id}/voice-reply",
+    response_model=CallVoiceReply,
+    summary="Голосовой ответ ИИ на звонок",
+)
+async def call_voice_reply(
+    call_id: int, session: SessionDep
+) -> CallVoiceReply:
+    call = await get_call_or_404(session, call_id)
+
+    if not (call.transcript_text or "").strip():
+        if call.recording_data is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Нет ни расшифровки, ни записи звонка",
+            )
+        result, error = await transcribe_and_store(session, call)
+        if result is None or not (call.transcript_text or "").strip():
+            raise HTTPException(
+                status_code=503,
+                detail=error or "Не удалось распознать запись звонка",
+            )
+
+    transcript = (call.transcript_text or "").strip()
+    ticket = await ensure_ticket_for_call(session, call)
+    analysis = await analyze_ticket(
+        session, ticket, force=True, use_llm=False
+    )
+
+    context = (
+        f"Категория: {analysis.classification.category_code}; "
+        f"проблема: {analysis.issue.description or 'не определена'}; "
+        "вопросы: "
+        + "; ".join(
+            item.question
+            for item in analysis.intake.questions_to_client
+        )
+    )
+
+    reply_text = await generate_reply(
+        get_analyzer().provider,
+        [{"role": "user", "content": transcript}],
+        context=context,
+    )
+    if not reply_text:
+        if analysis.intake.questions_to_client:
+            reply_text = analysis.intake.questions_to_client[0].question
+        elif analysis.issue.description:
+            reply_text = (
+                f"Понял: {analysis.issue.description}. "
+                "Уточните, пожалуйста, детали."
+            )
+        else:
+            reply_text = (
+                "Здравствуйте! Опишите, пожалуйста, проблему подробнее."
+            )
+
+    audio_base64: str | None = None
+    audio_mime: str | None = None
+    try:
+        audio, audio_mime = await synthesize_speech(reply_text)
+        audio_base64 = base64.b64encode(audio).decode("ascii")
+    except TTSProviderError as exc:
+        logger.info("TTS для звонка недоступен: %s", exc)
+
+    session.add(
+        ChatMessage(
+            session_id=ticket.chat_session_id,
+            role="assistant",
+            content=reply_text,
+        )
+    )
+    call.ai_analysis = {
+        **(call.ai_analysis or {}),
+        "voice_reply": reply_text,
+    }
+    await session.commit()
+
+    return CallVoiceReply(
+        call_id=call.id,
+        ticket_id=ticket.id,
+        transcript=transcript,
+        reply_text=reply_text,
+        audio_base64=audio_base64,
+        audio_mime=audio_mime,
+        provider=call.transcript_provider,
+    )
 
 
 @router.get(

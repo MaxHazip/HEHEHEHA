@@ -16,6 +16,28 @@ export interface TicketKnowledge {
   score?: number | null
 }
 
+export interface TicketAttachment {
+  id: number
+  kind: string
+  filename: string
+  mime_type: string
+  size_bytes: number
+  url: string
+  description?: string | null
+  created_at: string
+}
+
+export interface TicketCall {
+  id: number
+  status: string
+  recording_url: string | null
+  transcript_preview: string | null
+  duration_seconds: number | null
+  started_at: string
+  ended_at: string | null
+  client_phone: string | null
+}
+
 export interface Ticket {
   id: number
   title: string
@@ -27,5 +49,7 @@ export interface Ticket {
   priority: TicketPriority
   assignee: Engineer | null
   knowledge?: TicketKnowledge[]
+  attachments?: TicketAttachment[]
+  calls?: TicketCall[]
   createdAt: string
 }

@@ -15,7 +15,10 @@ import {
   ArrowUpRight,
   Loader2,
   UserRound,
+  Paperclip,
+  PhoneCall,
 } from 'lucide-react'
+import { apiUrl } from '@/lib/api'
 
 import {
   useApproveTicket,
@@ -46,6 +49,13 @@ const formatDate = (date: string) => {
     month: 'long',
     year: 'numeric',
   })
+}
+
+const formatDuration = (seconds: number | null) => {
+  if (seconds === null || seconds === undefined) return '—'
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  return `${minutes}:${String(rest).padStart(2, '0')}`
 }
 
 export default function TicketCard({ ticket }: Props) {
@@ -290,6 +300,109 @@ export default function TicketCard({ ticket }: Props) {
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Вложения */}
+
+      {ticket.attachments && ticket.attachments.length > 0 && (
+        <div className="mt-5 border-t border-gray-100 pt-4">
+          <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+            <Paperclip size={14} />
+            Вложения
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {ticket.attachments.map((attachment) => {
+              const url = apiUrl(attachment.url) ?? ''
+
+              if (attachment.kind === 'image') {
+                return (
+                  <a
+                    key={attachment.id}
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="overflow-hidden rounded-xl border border-gray-100"
+                  >
+                    <img
+                      src={url}
+                      alt={attachment.filename}
+                      className="h-24 w-full object-cover"
+                    />
+                  </a>
+                )
+              }
+
+              if (attachment.kind === 'audio') {
+                return (
+                  <audio
+                    key={attachment.id}
+                    controls
+                    src={url}
+                    className="col-span-2 w-full"
+                  />
+                )
+              }
+
+              return (
+                <a
+                  key={attachment.id}
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2 text-xs text-gray-500"
+                >
+                  <FileText size={14} className="shrink-0" />
+                  <span className="truncate">{attachment.filename}</span>
+                </a>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Звонки */}
+
+      {ticket.calls && ticket.calls.length > 0 && (
+        <div className="mt-5 border-t border-gray-100 pt-4">
+          <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+            <PhoneCall size={14} />
+            Записи звонков
+          </div>
+
+          <div className="space-y-2">
+            {ticket.calls.map((call) => {
+              const url = call.recording_url
+                ? apiUrl(call.recording_url) ?? ''
+                : ''
+
+              return (
+                <div
+                  key={call.id}
+                  className="rounded-xl bg-[#f5f5f3] p-3"
+                >
+                  <div className="flex items-center justify-between gap-2 text-[10px] font-medium text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <PhoneCall size={12} />
+                      {call.status}
+                    </span>
+                    <span>{formatDuration(call.duration_seconds)}</span>
+                  </div>
+
+                  {url && (
+                    <audio controls src={url} className="mt-2 w-full" />
+                  )}
+
+                  {call.transcript_preview && (
+                    <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-gray-500">
+                      {call.transcript_preview}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

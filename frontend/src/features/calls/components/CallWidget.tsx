@@ -9,7 +9,9 @@ import {
 import { wsUrl } from '@/lib/api'
 import {
   createCallSession,
+  requestVoiceReply,
   saveCall,
+  type CallVoiceReply,
   type SavedCall,
 } from '../api/callsApi'
 import { useCallRecorder } from '../hooks/useCallRecorder'
@@ -47,6 +49,7 @@ export default function CallWidget({
   const [preparing, setPreparing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedCall, setSavedCall] = useState<SavedCall | null>(null)
+  const [voiceReply, setVoiceReply] = useState<CallVoiceReply | null>(null)
 
   const callIdRef = useRef<number | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
@@ -103,6 +106,7 @@ export default function CallWidget({
   const handleStart = async () => {
     setError(null)
     setSavedCall(null)
+    setVoiceReply(null)
 
     const started = await start()
     if (!started) return
@@ -145,6 +149,14 @@ export default function CallWidget({
       callIdRef.current = null
       setSavedCall(saved)
       if (saved.ticketId !== null) onSaved?.(saved.ticketId)
+
+      try {
+        const reply = await requestVoiceReply(saved.id)
+        setVoiceReply(reply)
+        if (reply.ticket_id) onSaved?.(reply.ticket_id)
+      } catch {
+        // Запись и расшифровка уже сохранены; голосовой ответ опционален.
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -157,6 +169,9 @@ export default function CallWidget({
   }
 
   const displayError = error ?? recorderError
+  const voiceAudioUrl = voiceReply?.audio_base64
+    ? `data:${voiceReply.audio_mime || 'audio/wav'};base64,${voiceReply.audio_base64}`
+    : null
 
   return (
     <div className="bg-white border-b border-slate-200 p-4">
@@ -249,6 +264,25 @@ export default function CallWidget({
                 Текст не получен: расшифровка на сервере не настроена.
                 Запись доступна для прослушивания.
               </p>
+            )}
+
+            {voiceReply && (
+              <div className="space-y-2 rounded-lg bg-white/80 p-3">
+                <p className="text-xs font-semibold text-slate-700">
+                  Ответ ИИ
+                </p>
+                <p className="text-xs text-slate-600 whitespace-pre-wrap">
+                  {voiceReply.reply_text}
+                </p>
+                {voiceAudioUrl && (
+                  <audio
+                    controls
+                    autoPlay
+                    src={voiceAudioUrl}
+                    className="w-full"
+                  />
+                )}
+              </div>
             )}
           </div>
         )}

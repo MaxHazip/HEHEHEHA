@@ -130,11 +130,11 @@ class TicketSummary(BaseModel):
     ai_confidence: float | None = None
     needs_human_review: bool = True
     knowledge: list[KnowledgeArticleRead] = Field(default_factory=list)
+    attachments: list[AttachmentRead] = Field(default_factory=list)
+    calls: list[CallSummary] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
 
 class TicketDetail(TicketSummary):
     messages: list[MessageRead] = Field(default_factory=list)
-    attachments: list[AttachmentRead] = Field(default_factory=list)
-    calls: list[CallSummary] = Field(default_factory=list)

@@ -377,6 +377,10 @@ Ollama (systemd/окружение), а не backend.
 5. `POST /api/calls/{id}/analyze` создаёт/обновляет заявку через Qwen3.
 6. WebSocket `/api/calls/{id}/signal` ретранслирует SDP/ICE и live-текст
    между клиентом и диспетчером.
+7. После сохранения звонка frontend вызывает
+   `POST /api/calls/{id}/voice-reply`; backend генерирует ответ Qwen3,
+   синтезирует его Silero TTS и возвращает текст + base64-аудио.
+   Ответ сохраняется в переписку заявки и проигрывается в виджете.
 
 Live-субтитры браузера (Google Web Speech) **выключены по умолчанию**;
 включаются `VITE_BROWSER_SPEECH=true`. Основная расшифровка — T-one.
@@ -422,6 +426,7 @@ Live-субтитры браузера (Google Web Speech) **выключены 
 | `GET` | `/api/tickets/{id}` | карточка заявки |
 | `PATCH` | `/api/tickets/{id}` | обновить заявку |
 | `POST` | `/api/tickets/{id}/assign` | назначить инженера |
+| `POST` | `/api/tickets/{id}/auto-assign` | автоназначить по категории |
 | `GET/POST` | `/api/tickets/{id}/messages` | сообщения |
 | `GET/POST` | `/api/tickets/{id}/attachments` | вложения |
 | `GET` | `/api/tickets/{id}/calls` | звонки заявки |
@@ -437,6 +442,7 @@ Live-субтитры браузера (Google Web Speech) **выключены 
 | `PUT` | `/api/calls/{id}/transcript` | сохранить расшифровку |
 | `POST` | `/api/calls/{id}/transcribe` | T-one/Whisper/Google |
 | `POST` | `/api/calls/{id}/analyze` | анализ звонка |
+| `POST` | `/api/calls/{id}/voice-reply` | голосовой ответ ИИ на звонок |
 | `WS` | `/api/calls/{id}/signal` | WebRTC + live-текст |
 | `POST` | `/api/voice/transcribe` | речь → текст |
 | `POST` | `/api/voice/tts` | текст → речь |

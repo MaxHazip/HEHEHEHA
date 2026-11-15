@@ -57,6 +57,16 @@ export interface AnalysisResult {
   ticket_id?: string
 }
 
+export interface CallVoiceReply {
+  call_id: number
+  ticket_id: number
+  transcript: string
+  reply_text: string
+  audio_base64: string | null
+  audio_mime: string | null
+  provider: string | null
+}
+
 export interface SaveCallParams {
   callId?: number | null
   ticketId: number | null
@@ -152,6 +162,17 @@ export async function transcribeCall(callId: number): Promise<CallDetail> {
 async function analyzeCall(callId: number): Promise<AnalysisResult> {
   const { data } = await api.post<AnalysisResult>(
     `/api/calls/${callId}/analyze`,
+    undefined,
+    { timeout: AI_TIMEOUT_MS },
+  )
+  return data
+}
+
+export async function requestVoiceReply(
+  callId: number,
+): Promise<CallVoiceReply> {
+  const { data } = await api.post<CallVoiceReply>(
+    `/api/calls/${callId}/voice-reply`,
     undefined,
     { timeout: AI_TIMEOUT_MS },
   )

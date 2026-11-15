@@ -51,6 +51,18 @@ DEMO_USERS: list[dict] = [
         "competencies": ["software", "access", "mail"],
     },
     {
+        "name": "Ольга Телефонистова",
+        "email": "phone@dispatch.local",
+        "role": "engineer",
+        "competencies": ["phone", "access"],
+    },
+    {
+        "name": "Сергей Универсалов",
+        "email": "other@dispatch.local",
+        "role": "engineer",
+        "competencies": ["other"],
+    },
+    {
         "name": "Заявитель",
         "email": "requester@dispatch.local",
         "role": "requester",
@@ -200,6 +212,14 @@ async def seed_demo_data(session: AsyncSession) -> None:
                     )
                 )
                 created += 1
+            else:
+                merged = sorted(
+                    set(engineer.competencies or [])
+                    | set(item["competencies"])
+                )
+                if merged != list(engineer.competencies or []):
+                    engineer.competencies = merged
+                    created += 1
 
     if created:
         await session.commit()

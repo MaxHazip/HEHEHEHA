@@ -69,6 +69,25 @@ async def ensure_ticket_for_call(
     if call.ticket_id is not None:
         ticket = await session.get(Ticket, call.ticket_id)
         if ticket is not None:
+            transcript = (call.transcript_text or "").strip()
+            if transcript:
+                exists = await session.scalar(
+                    select(ChatMessage.id)
+                    .where(
+                        ChatMessage.session_id == ticket.chat_session_id,
+                        ChatMessage.content == transcript,
+                    )
+                    .limit(1)
+                )
+                if exists is None:
+                    session.add(
+                        ChatMessage(
+                            session_id=ticket.chat_session_id,
+                            role="user",
+                            content=transcript,
+                        )
+                    )
+                    await session.flush()
             return ticket
 
     requester = await get_or_create_requester(session)

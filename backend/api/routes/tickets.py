@@ -26,6 +26,8 @@ from backend.api.serializers import (
     build_ticket_detail,
     build_ticket_summary,
     call_summary,
+    load_attachments_for_tickets,
+    load_calls_for_tickets,
     load_knowledge_for_tickets,
     message_read,
 )
@@ -55,6 +57,7 @@ from backend.schemas.ticket_schemas import (
 )
 from backend.services.accounts import get_or_create_requester
 from backend.services.ai_service import analyze_ticket
+from backend.services.assignment import assign_engineer_for_ticket
 from backend.services.chat_service import (
     finish_chat,
     generate_chat_deltas,
@@ -173,14 +176,23 @@ async def list_tickets(
         .offset(offset)
     )
     tickets = (await session.scalars(stmt)).all()
+    ticket_ids = [ticket.id for ticket in tickets]
 
     knowledge_map = await load_knowledge_for_tickets(
-        session, [ticket.id for ticket in tickets]
+        session, ticket_ids
     )
+    attachments_map = await load_attachments_for_tickets(
+        session, ticket_ids
+    )
+    calls_map = await load_calls_for_tickets(session, ticket_ids)
 
     return [
         await build_ticket_summary(
-            session, ticket, knowledge=knowledge_map.get(ticket.id, [])
+            session,
+            ticket,
+            knowledge=knowledge_map.get(ticket.id, []),
+            attachments=attachments_map.get(ticket.id, []),
+            calls=calls_map.get(ticket.id, []),
         )
         for ticket in tickets
     ]
@@ -217,6 +229,19 @@ async def update_ticket(
     for field, value in data.items():
         setattr(ticket, field, value)
 
+    if (
+        "engineer_id" not in data
+        and ticket.category_id is not None
+        and ticket.engineer_id is None
+    ):
+        try:
+            await assign_engineer_for_ticket(session, ticket)
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "Не удалось автоназначить инженера для заявки %s",
+                ticket.id,
+            )
+
     await session.commit()
     await session.refresh(ticket)
     return await build_ticket_detail(session, ticket)
@@ -238,6 +263,28 @@ async def assign_ticket(
         raise HTTPException(status_code=404, detail="Инженер не найден")
     ticket.engineer_id = engineer.id
     await session.commit()
+    await session.refresh(ticket)
+    return await build_ticket_detail(session, ticket)
+
+
+@router.post(
+    "/{ticket_id}/auto-assign",
+    response_model=TicketDetail,
+    summary="Автоназначить инженера по категории",
+)
+async def auto_assign_ticket(
+    ticket_id: int,
+    session: SessionDep,
+) -> TicketDetail:
+    ticket = await get_ticket_or_404(session, ticket_id)
+    engineer = await assign_engineer_for_ticket(
+        session, ticket, force=True, commit=True
+    )
+    if engineer is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Нет доступных инженеров для этой категории",
+        )
     await session.refresh(ticket)
     return await build_ticket_detail(session, ticket)
 

@@ -711,6 +711,12 @@ curl -s -X POST http://localhost:8000/api/tickets/1/chat \
 curl -N -X POST http://localhost:8000/api/tickets/1/chat/stream \
   -H 'Content-Type: application/json' \
   -d '{"text":"Не работает интернет в 305 кабинете"}'
+
+# Автоназначение инженера по категории
+curl -X POST http://localhost:8000/api/tickets/1/auto-assign
+
+# Голосовой ответ ИИ на сохранённый звонок (T-one -> Qwen3 -> Silero)
+curl -X POST http://localhost:8000/api/calls/1/voice-reply | python -m json.tool
 ```
 
 WebSocket для потокового T-one:

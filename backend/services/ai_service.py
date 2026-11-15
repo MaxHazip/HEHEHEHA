@@ -140,13 +140,13 @@ async def build_analysis_request(
 
     for call in calls:
         transcript = (call.transcript_text or "").strip()
-        if transcript:
-            messages.append(
-                AIMessage(
-                    role="client",
-                    text=f"Расшифровка телефонного звонка: {transcript}",
-                )
-            )
+        if not transcript:
+            continue
+        if transcript in {
+            message.text.strip() for message in messages
+        }:
+            continue
+        messages.append(AIMessage(role="client", text=transcript))
 
     if extra_text and extra_text.strip():
         messages.append(AIMessage(role="client", text=extra_text.strip()))
@@ -345,6 +345,13 @@ async def analyze_ticket(
 
     await _apply_classification(session, ticket, result)
     _apply_result(ticket, result)
+
+    try:
+        from backend.services.assignment import assign_engineer_for_ticket
+
+        await assign_engineer_for_ticket(session, ticket)
+    except Exception:  # noqa: BLE001
+        logger.exception("Не удалось автоназначить инженера")
 
     max_version = await session.scalar(
         select(TicketAnalysis.version)

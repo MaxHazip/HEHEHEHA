@@ -227,10 +227,60 @@ async def load_knowledge_for_tickets(
     return result
 
 
+async def load_attachments_for_tickets(
+    session: AsyncSession, ticket_ids: list[int]
+) -> dict[int, list[AttachmentRead]]:
+    if not ticket_ids:
+        return {}
+
+    rows = (
+        await session.scalars(
+            select(TicketAttachment)
+            .options(defer(TicketAttachment.data))
+            .where(TicketAttachment.ticket_id.in_(ticket_ids))
+            .order_by(TicketAttachment.id)
+        )
+    ).all()
+
+    result: dict[int, list[AttachmentRead]] = {}
+    for row in rows:
+        if row.ticket_id is None:
+            continue
+        result.setdefault(row.ticket_id, []).append(
+            attachment_read(row)
+        )
+    return result
+
+
+async def load_calls_for_tickets(
+    session: AsyncSession, ticket_ids: list[int]
+) -> dict[int, list[CallSummary]]:
+    if not ticket_ids:
+        return {}
+
+    rows = (
+        await session.scalars(
+            select(Call)
+            .options(defer(Call.recording_data))
+            .where(Call.ticket_id.in_(ticket_ids))
+            .order_by(Call.id)
+        )
+    ).all()
+
+    result: dict[int, list[CallSummary]] = {}
+    for row in rows:
+        if row.ticket_id is None:
+            continue
+        result.setdefault(row.ticket_id, []).append(call_summary(row))
+    return result
+
+
 async def build_ticket_summary(
     session: AsyncSession,
     ticket: Ticket,
     knowledge: list[KnowledgeArticleRead] | None = None,
+    attachments: list[AttachmentRead] | None = None,
+    calls: list[CallSummary] | None = None,
 ) -> TicketSummary:
     assignee = await _assignee(session, ticket)
 
@@ -266,6 +316,16 @@ async def build_ticket_summary(
         )
         knowledge = knowledge_map.get(ticket.id, [])
 
+    if attachments is None:
+        attachments_map = await load_attachments_for_tickets(
+            session, [ticket.id]
+        )
+        attachments = attachments_map.get(ticket.id, [])
+
+    if calls is None:
+        calls_map = await load_calls_for_tickets(session, [ticket.id])
+        calls = calls_map.get(ticket.id, [])
+
     return TicketSummary(
         id=ticket.id,
         title=_title(ticket, category, subcategory),
@@ -287,6 +347,8 @@ async def build_ticket_summary(
         ),
         needs_human_review=ticket.needs_human_review,
         knowledge=knowledge,
+        attachments=attachments,
+        calls=calls,
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
     )
@@ -305,15 +367,7 @@ async def build_ticket_detail(
         )
     ).all()
 
-    attachments = (
-        await session.scalars(
-            select(TicketAttachment)
-            .options(defer(TicketAttachment.data))
-            .where(TicketAttachment.ticket_id == ticket.id)
-            .order_by(TicketAttachment.id)
-        )
-    ).all()
-    attachment_reads = [attachment_read(item) for item in attachments]
+    attachment_reads = summary.attachments
 
     by_message: dict[int, list[AttachmentRead]] = {}
     for item in attachment_reads:
@@ -325,18 +379,7 @@ async def build_ticket_detail(
         for message in messages
     ]
 
-    calls = (
-        await session.scalars(
-            select(Call)
-            .options(defer(Call.recording_data))
-            .where(Call.ticket_id == ticket.id)
-            .order_by(Call.id)
-        )
-    ).all()
-
     return TicketDetail(
         **summary.model_dump(),
         messages=message_reads,
-        attachments=attachment_reads,
-        calls=[call_summary(call) for call in calls],
     )

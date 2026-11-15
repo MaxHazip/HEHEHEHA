@@ -67,3 +67,13 @@ class CallRead(BaseModel):
 
 class CallDetail(CallRead):
     segments: list[TranscriptSegmentRead] = Field(default_factory=list)
+
+
+class CallVoiceReply(BaseModel):
+    call_id: int
+    ticket_id: int
+    transcript: str
+    reply_text: str
+    audio_base64: str | None = None
+    audio_mime: str | None = None
+    provider: str | None = None
