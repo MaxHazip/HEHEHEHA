@@ -34,10 +34,12 @@ from backend.api.serializers import (
 from backend.core.database import create_session_maker, get_session
 from backend.core.settings import settings
 from backend.models import (
+    Category,
     Call,
     ChatMessage,
     ChatSession,
     Engineer,
+    Subcategory,
     Ticket,
     TicketAttachment,
 )
@@ -225,6 +227,29 @@ async def update_ticket(
         engineer = await session.get(Engineer, data["engineer_id"])
         if engineer is None:
             raise HTTPException(status_code=404, detail="Инженер не найден")
+
+    for field in ("status", "needs_human_review", "is_mass_incident"):
+        if field in data and data[field] is None:
+            raise HTTPException(status_code=422, detail=f"{field} не может быть null")
+
+    if "category_id" in data or "subcategory_id" in data:
+        category_id = data.get("category_id", ticket.category_id)
+        if category_id is not None and await session.get(Category, category_id) is None:
+            raise HTTPException(status_code=404, detail="Категория не найдена")
+
+        # Смена категории сбрасывает прежнюю подкатегорию, если новую не передали.
+        if category_id != ticket.category_id:
+            data.setdefault("subcategory_id", None)
+
+        subcategory_id = data.get("subcategory_id", ticket.subcategory_id)
+        if subcategory_id is not None:
+            subcategory = await session.get(Subcategory, subcategory_id)
+            if subcategory is None:
+                raise HTTPException(status_code=404, detail="Подкатегория не найдена")
+            if subcategory.category_id != category_id:
+                raise HTTPException(
+                    status_code=422, detail="Подкатегория не принадлежит категории"
+                )
 
     for field, value in data.items():
         setattr(ticket, field, value)
